@@ -75,6 +75,9 @@ SEND_INTERVAL = 1.0 / 10
 TIMEOUT_SECONDS = 12
 ANIMATION_PERIOD = 10
 
+# 版本号（发布时同步更新；用户报障时能从启动信息里看到）
+__version__ = "1.0.0"
+
 # Chatbox: 把当前心率发到 VRChat 聊天框（OSC 地址 /chatbox/input）
 CHATBOX_ENABLE = False
 CHATBOX_TEMPLATE = "当前心率：{hr}"
@@ -1865,7 +1868,7 @@ class HeartRateWebUI:
         demo = self.build()
         url = f"http://{self.host}:{self.port}"
         print("\n" + "=" * 68)
-        print("  摄像头心率 → VRChat  （网页界面）")
+        print(f"  摄像头心率 → VRChat    v{__version__}  （网页界面）")
         print("=" * 68)
         print(f"  请在浏览器打开:  {url}")
         print()
