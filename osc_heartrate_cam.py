@@ -1239,17 +1239,58 @@ def camera_label(index, name):
     return f"#{index}  {name}{tag}"
 
 
+# 摄像头探测的超时保护。
+#
+# 背景: cap.read() 在设备被其他程序占用时可能**无限阻塞**，而枚举要给每个
+# 索引都做一次开关+读帧。实测当摄像头被 VRChat 面补占用时，枚举会卡死，
+# 连启动横幅都打不出来 —— 用户看到的就是"双击没反应"。
+# 所以每个探测都放进看门狗，超时就跳过该索引，并用总预算兜底。
+# 宁可少列出几个摄像头，也不能让程序起不来。
+PROBE_TIMEOUT_SEC = 4.0
+ENUM_TOTAL_BUDGET_SEC = 25.0
+
+
+def _probe_with_timeout(fn, timeout):
+    """在守护线程里跑 fn，超时返回 (None, True)。
+
+    注意: 超时后线程无法强行终止（Python 没有这能力）。但它是 daemon，
+    不会阻止进程退出；且一旦占用设备的程序释放设备，阻塞的 read 就会返回。
+    调用方每轮最多泄漏一个线程，可以接受。
+    """
+    box = {}
+
+    def target():
+        try:
+            box["r"] = fn()
+        except Exception as e:  # noqa: BLE001
+            box["e"] = e
+
+    t = threading.Thread(target=target, daemon=True, name="probe")
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return None, True
+    if "e" in box:
+        raise box["e"]
+    return box.get("r"), False
+
+
 def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
     """枚举可用摄像头，并顺带检查每个能否看到人脸。
 
-    返回 [{"index", "backend", "size", "has_face", "noise"}, ...]
+    返回 [{"index", "backend", "size", "has_face", "name"}, ...]
     标出"有人脸"能立刻告诉用户该选哪个，省得逐个试。
 
     速度说明: 枚举慢主要来自三块 —— 不存在的索引要等驱动超时（约 0.4s/个）、
     不支持的索引要走分辨率回退（实测某个摄像头 640x480 全失败、要退到
     1280x720，耗 3.4s）、以及设备释放开销。因此默认只扫 0~5，
     人脸校验帧数也压到最少。需要扫更大索引时用 --max-index。
+
+    健壮性: 每个索引的探测都有超时保护（PROBE_TIMEOUT_SEC），并有总预算
+    （ENUM_TOTAL_BUDGET_SEC）。设备被占用导致 read 阻塞时不会卡死程序，
+    代价是可能漏掉那个摄像头 —— 但这远好过整个界面起不来。
     """
+    t_start = time.time()
     det = None
     if yunet_path and os.path.isfile(yunet_path):
         try:
@@ -1261,30 +1302,55 @@ def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
 
     names = get_camera_names()
     out = []
+    timed_out = []
     for i in range(max_index):
-        cap, info = open_camera(i, verbose=False, fast=True)
-        if cap is None:
-            continue
-        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        has_face = False
-        if det is not None:
-            hits = 0
-            checked = 0
-            for _ in range(face_frames):
-                ok, fr = cap.read()
-                if not ok or fr is None:
-                    continue
-                checked += 1
-                det.setInputSize((fr.shape[1], fr.shape[0]))
-                _, faces = det.detect(fr)
-                if faces is not None and len(faces) > 0:
-                    hits += 1
-            has_face = checked > 0 and (hits / checked) >= 0.5
-        out.append({"index": i, "backend": info, "size": (w, h),
+        if time.time() - t_start > ENUM_TOTAL_BUDGET_SEC:
+            timed_out.append(f"#{i}+")
+            logging.warning(
+                f"摄像头枚举已用 {ENUM_TOTAL_BUDGET_SEC:.0f} 秒，停止继续扫描。"
+                f"若确实有更多摄像头，用 --max-index 配合空闲的摄像头重试")
+            break
+
+        def probe(idx=i):
+            cap, info = open_camera(idx, verbose=False, fast=True)
+            if cap is None:
+                return None
+            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            has_face = False
+            if det is not None:
+                hits = checked = 0
+                for _ in range(face_frames):
+                    ok, fr = cap.read()
+                    if not ok or fr is None:
+                        continue
+                    checked += 1
+                    det.setInputSize((fr.shape[1], fr.shape[0]))
+                    _, faces = det.detect(fr)
+                    if faces is not None and len(faces) > 0:
+                        hits += 1
+                has_face = checked > 0 and (hits / checked) >= 0.5
+            cap.release()
+            return {"index": idx, "backend": info, "size": (w, h),
                     "has_face": has_face,
-                    "name": names[i] if i < len(names) else ""})
-        cap.release()
+                    "name": names[idx] if idx < len(names) else ""}
+
+        try:
+            r, to = _probe_with_timeout(probe, PROBE_TIMEOUT_SEC)
+        except Exception as e:
+            logging.debug(f"摄像头 #{i} 探测异常: {e}")
+            continue
+        if to:
+            timed_out.append(f"#{i}")
+            logging.warning(f"摄像头 #{i} 探测超时（{PROBE_TIMEOUT_SEC:.0f}秒）—— "
+                            f"设备可能正被其他程序占用，已跳过")
+            continue
+        if r is not None:
+            out.append(r)
+
+    if timed_out:
+        logging.warning(f"以下索引被跳过（超时或无响应）: {', '.join(timed_out)}")
+
     # 有人脸的排前面
     out.sort(key=lambda c: (not c["has_face"], c["index"]))
     return out
