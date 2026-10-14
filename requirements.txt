@@ -1,0 +1,37 @@
+# VRChat 无接触心率 —— 运行依赖
+#
+# 注意: numpy 必须 < 2.1
+#   numba / gradio 3.x 与 numpy 2.x 不兼容，实测会被 pip 自动升到 2.2 导致
+#   其他依赖 numpy 的项目集体报错。这里显式钉住上限。
+#
+# 安装:  pip install -r requirements.txt
+
+numpy>=1.24,<2.1
+
+# rPPG 推理
+onnxruntime>=1.16          # FacePhys 模型推理（CPU 即可）
+
+# 图像与人脸检测
+opencv-python>=4.8         # 摄像头采集 + YuNet 人脸检测
+                           # 注意: OpenCV 5.0 移除了 CascadeClassifier，
+                           # 但本项目用的是 FaceDetectorYN（DNN），5.x 也能用
+
+# 信号处理
+scipy>=1.10                # 带通滤波 / Welch PSD / 重采样
+
+# 网页界面
+gradio>=3.50,<4            # 3.x 已验证；4.x 未测试（every 轮询行为不同）
+matplotlib>=3.7            # gradio 导入期即需要，勿省略
+
+# ---------------------------------------------------------------------------
+# 可选功能依赖
+# ---------------------------------------------------------------------------
+# 「虚拟摄像头输出」需要 pyvirtualcam，但它是 GPL-3.0（传染性许可证）。
+# 如果你要以 MIT 等宽松许可证分发本项目，**不要**把它打进发行包 ——
+# 核心测心率功能不依赖它，缺失时程序会在启用该功能时给出提示。
+#
+# 需要该功能时另装:
+#   pip install -r requirements-optional.txt
+#
+# 打包（可选）
+# pyinstaller>=6.0

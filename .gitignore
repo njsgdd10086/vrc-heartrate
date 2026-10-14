@@ -1,0 +1,47 @@
+# ---- 模型权重（体积大，由 tools/download_models.py 获取）----
+# 注意: 只忽略 .onnx；models/ 下的许可证文件必须提交
+models/*.onnx
+
+# ---- 上游仓库（项目已自包含，不再需要）----
+FacePhys-Release/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- PyInstaller ----
+build_web/
+*.manifest
+_dl_tmp/
+
+# ---- 本程序运行时产生的 ----
+cam_bvp_debug.npy
+vrc-heartrate.log
+.vrc_heartrate_cam/
+
+# ---- 诊断输出 ----
+_cam*.png
+_idx*.png
+_wave*.png
+*.log
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

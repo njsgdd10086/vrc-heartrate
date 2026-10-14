@@ -1,0 +1,12 @@
+# 可选功能依赖
+#
+# 只在你需要「虚拟摄像头输出」时才安装:
+#     pip install -r requirements-optional.txt
+#
+# ⚠️ 许可证提醒
+#   pyvirtualcam 是 GPL-3.0。若你把它打包进发行版，发行版整体会受到
+#   GPL-3.0 的约束。核心测心率功能**不依赖**它，所以以 MIT 分发时
+#   可以不装、不打包。
+#   详见 THIRD_PARTY_LICENSES.md。
+
+pyvirtualcam>=0.11
