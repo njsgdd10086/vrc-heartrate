@@ -143,6 +143,49 @@ shutdown_event = asyncio.Event()
 # （OnReadSample error -1072875772 = MF_E_HW_MFT_FAILED_START_STREAMING），
 # 而在 1280x720 下 40 帧全部正常。所以必须实测抓帧并校验内容。
 
+# 超时保护（必须在函数定义之前）
+#
+# 背景: OpenCV 的 cap.read() / VideoCapture 构造在设备异常时会**无限阻塞**。
+# 实测同一台机器上 HD Camera(索引1) 在 MSMF 后端下永久卡住，而 DSHOW 完全
+# 正常 —— 所以超时必须下沉到"单个后端的一次尝试"，否则一个后端卡住会让
+# 整颗摄像头被误判为不可用（这正是之前的 bug：下拉框里少了那颗摄像头）。
+#
+# 数值权衡: 太大则枚举慢（用户干等界面），太小则误杀正常但缓慢的设备。
+# 实测正常后端 1~4 秒内出结果，留 5 秒；复核只需 5 帧，3 秒足够。
+PROBE_TIMEOUT_SEC = 5.0        # 单次「打开 + 抓帧」时限
+VERIFY_TIMEOUT_SEC = 3.0       # 采纳句柄前的复核时限
+ENUM_TOTAL_BUDGET_SEC = 45.0   # 整轮枚举的总预算（兜底，正常用不到）
+
+
+def _run_with_timeout(fn, timeout):
+    """在守护线程里跑 fn，超时返回 (None, True)。
+
+    为什么必须这么做: OpenCV 的 cap.read() / VideoCapture 构造在设备异常时
+    会**无限阻塞**，实测某摄像头在 MSMF 后端下直接卡死（DSHOW 却完全正常）。
+    没有这层保护，一个后端卡住就会把整个枚举/启动拖死。
+
+    注意: 超时后线程无法强行终止（Python 没这能力）。但它是 daemon，
+    不阻止进程退出；且一旦设备被释放，阻塞的调用终会返回。
+    调用方每轮最多泄漏一个线程，可以接受。
+    """
+    box = {}
+
+    def target():
+        try:
+            box["r"] = fn()
+        except Exception as e:  # noqa: BLE001
+            box["e"] = e
+
+    t = threading.Thread(target=target, daemon=True, name="probe")
+    t.start()
+    t.join(timeout)
+    if t.is_alive():
+        return None, True
+    if "e" in box:
+        raise box["e"]
+    return box.get("r"), False
+
+
 def _verify_cap(cap, check=5):
     """在被采纳前再验证一次：真正能连续读到有效帧才算数。
 
@@ -151,18 +194,23 @@ def _verify_cap(cap, check=5):
     全部失败，表现为画面完全不动、frames_failed 飙升）。所以选定候选后
     必须重新验证，不能直接相信探测阶段的结果。
     """
-    try:
+    def _do():
         good = 0
         for _ in range(check):
             ok, fr = cap.read()
             if ok and fr is not None and fr.size > 0 and float(fr.std()) > 1.0:
                 good += 1
         return good >= max(1, check // 2)
+
+    try:
+        r, timed_out = _run_with_timeout(_do, VERIFY_TIMEOUT_SEC)
+        return bool(r) and not timed_out
     except Exception:
         return False
 
 
-def try_open_once(index, backend, width, height, warmup=5, check=8):
+def try_open_once(index, backend, width, height, warmup=5, check=8,
+                  timeout=PROBE_TIMEOUT_SEC):
     """打开一次并实测抓帧。
 
     返回 (cap, 描述, 实测fps) 或 (None, 失败原因, 0)。
@@ -171,46 +219,56 @@ def try_open_once(index, backend, width, height, warmup=5, check=8):
     （实测某摄像头 DSHOW 57ms/帧 ≈ 15fps，MSMF 只要 33ms/帧 ≈ 30fps），
     而 cap.read() 往往是整条流水线里最慢的一步。选后端要按实测速度来，
     不能写死顺序 —— 不同机器结论可能不同。
+
+    timeout: 整个"打开+抓帧"过程的时限。**关键**：某个后端可能永久阻塞
+    （实测 HD Camera 在 MSMF 下如此，而 DSHOW 正常），必须能被超时打断，
+    否则后面更合适的后端根本没机会尝试。
     """
-    cap = cv2.VideoCapture(index, backend)
-    if not cap.isOpened():
-        cap.release()
-        return None, "打不开", 0.0
-    try:
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-        try:
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        except Exception:
-            pass
-        aw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        ah = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        # 丢弃启动阶段的空帧（摄像头刚打开时前几帧常是黑的）
-        for _ in range(warmup):
-            cap.read()
-        good = blank = fail = 0
-        t0 = time.perf_counter()
-        for _ in range(check):
-            ok, fr = cap.read()
-            if not ok or fr is None or fr.size == 0:
-                fail += 1
-            elif float(fr.std()) < 1.0:
-                blank += 1          # 纯色/黑屏也算无效
-            else:
-                good += 1
-        elapsed = max(time.perf_counter() - t0, 1e-6)
-        if good == 0:
-            reason = "全失败" if fail else ("全空帧" if blank else "无数据")
+    def _do():
+        cap = cv2.VideoCapture(index, backend)
+        if not cap.isOpened():
             cap.release()
-            return None, f"{reason}({aw}x{ah})", 0.0
-        measured_fps = good / elapsed
-        return cap, f"{aw}x{ah}", measured_fps
-    except Exception as e:
+            return None, "打不开", 0.0
         try:
-            cap.release()
-        except Exception:
-            pass
-        return None, f"异常 {type(e).__name__}", 0.0
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            try:
+                cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            except Exception:
+                pass
+            aw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            ah = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            # 丢弃启动阶段的空帧（摄像头刚打开时前几帧常是黑的）
+            for _ in range(warmup):
+                cap.read()
+            good = blank = fail = 0
+            t0 = time.perf_counter()
+            for _ in range(check):
+                ok, fr = cap.read()
+                if not ok or fr is None or fr.size == 0:
+                    fail += 1
+                elif float(fr.std()) < 1.0:
+                    blank += 1          # 纯色/黑屏也算无效
+                else:
+                    good += 1
+            elapsed = max(time.perf_counter() - t0, 1e-6)
+            if good == 0:
+                reason = "全失败" if fail else ("全空帧" if blank else "无数据")
+                cap.release()
+                return None, f"{reason}({aw}x{ah})", 0.0
+            return cap, f"{aw}x{ah}", good / elapsed
+        except Exception as e:
+            try:
+                cap.release()
+            except Exception:
+                pass
+            return None, f"异常 {type(e).__name__}", 0.0
+
+    result, timed_out = _run_with_timeout(_do, timeout)
+    if timed_out:
+        # 泄漏的那个线程仍持有设备，尽力而为地不阻塞即可
+        return None, f"超时(>{timeout:.0f}s，该后端阻塞)", 0.0
+    return result if result else (None, "无结果", 0.0)
 
 
 def open_camera(index, prefer_size=None, verbose=True, fast=False):
@@ -1239,40 +1297,9 @@ def camera_label(index, name):
     return f"#{index}  {name}{tag}"
 
 
-# 摄像头探测的超时保护。
-#
-# 背景: cap.read() 在设备被其他程序占用时可能**无限阻塞**，而枚举要给每个
-# 索引都做一次开关+读帧。实测当摄像头被 VRChat 面补占用时，枚举会卡死，
-# 连启动横幅都打不出来 —— 用户看到的就是"双击没反应"。
-# 所以每个探测都放进看门狗，超时就跳过该索引，并用总预算兜底。
-# 宁可少列出几个摄像头，也不能让程序起不来。
-PROBE_TIMEOUT_SEC = 4.0
-ENUM_TOTAL_BUDGET_SEC = 25.0
-
-
 def _probe_with_timeout(fn, timeout):
-    """在守护线程里跑 fn，超时返回 (None, True)。
-
-    注意: 超时后线程无法强行终止（Python 没有这能力）。但它是 daemon，
-    不会阻止进程退出；且一旦占用设备的程序释放设备，阻塞的 read 就会返回。
-    调用方每轮最多泄漏一个线程，可以接受。
-    """
-    box = {}
-
-    def target():
-        try:
-            box["r"] = fn()
-        except Exception as e:  # noqa: BLE001
-            box["e"] = e
-
-    t = threading.Thread(target=target, daemon=True, name="probe")
-    t.start()
-    t.join(timeout)
-    if t.is_alive():
-        return None, True
-    if "e" in box:
-        raise box["e"]
-    return box.get("r"), False
+    """兼容旧调用名（实际实现在 _run_with_timeout）"""
+    return _run_with_timeout(fn, timeout)
 
 
 def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
@@ -1281,14 +1308,14 @@ def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
     返回 [{"index", "backend", "size", "has_face", "name"}, ...]
     标出"有人脸"能立刻告诉用户该选哪个，省得逐个试。
 
-    速度说明: 枚举慢主要来自三块 —— 不存在的索引要等驱动超时（约 0.4s/个）、
-    不支持的索引要走分辨率回退（实测某个摄像头 640x480 全失败、要退到
-    1280x720，耗 3.4s）、以及设备释放开销。因此默认只扫 0~5，
+    速度说明: 枚举慢主要来自三块 —— 不存在的索引要等驱动超时、
+    不支持的索引要走分辨率回退、以及设备释放开销。因此默认只扫 0~5，
     人脸校验帧数也压到最少。需要扫更大索引时用 --max-index。
 
-    健壮性: 每个索引的探测都有超时保护（PROBE_TIMEOUT_SEC），并有总预算
-    （ENUM_TOTAL_BUDGET_SEC）。设备被占用导致 read 阻塞时不会卡死程序，
-    代价是可能漏掉那个摄像头 —— 但这远好过整个界面起不来。
+    健壮性: 超时保护下沉在 try_open_once 里（每个后端单独计时），
+    所以某个后端阻塞不会让整颗摄像头被漏掉 —— 实测 HD Camera 正是
+    这种情况：MSMF 永久阻塞、DSHOW 正常，必须靠 DSHOW 把它列出来。
+    这里只保留一个总预算兜底，防止极端情况下无休止扫描。
     """
     t_start = time.time()
     det = None
@@ -1302,57 +1329,54 @@ def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
 
     names = get_camera_names()
     out = []
-    timed_out = []
+    skipped = []
     for i in range(max_index):
         if time.time() - t_start > ENUM_TOTAL_BUDGET_SEC:
-            timed_out.append(f"#{i}+")
+            skipped.append(f"#{i}+（超出总预算）")
             logging.warning(
                 f"摄像头枚举已用 {ENUM_TOTAL_BUDGET_SEC:.0f} 秒，停止继续扫描。"
                 f"若确实有更多摄像头，用 --max-index 配合空闲的摄像头重试")
             break
 
-        def probe(idx=i):
-            cap, info = open_camera(idx, verbose=False, fast=True)
-            if cap is None:
-                return None
-            w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-            h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            has_face = False
-            if det is not None:
-                hits = checked = 0
-                for _ in range(face_frames):
-                    ok, fr = cap.read()
-                    if not ok or fr is None:
-                        continue
-                    checked += 1
-                    det.setInputSize((fr.shape[1], fr.shape[0]))
-                    _, faces = det.detect(fr)
-                    if faces is not None and len(faces) > 0:
-                        hits += 1
-                has_face = checked > 0 and (hits / checked) >= 0.5
-            cap.release()
-            return {"index": idx, "backend": info, "size": (w, h),
-                    "has_face": has_face,
-                    "name": names[idx] if idx < len(names) else ""}
-
         try:
-            r, to = _probe_with_timeout(probe, PROBE_TIMEOUT_SEC)
+            cap, info = open_camera(i, verbose=False, fast=True)
         except Exception as e:
             logging.debug(f"摄像头 #{i} 探测异常: {e}")
             continue
-        if to:
-            timed_out.append(f"#{i}")
-            logging.warning(f"摄像头 #{i} 探测超时（{PROBE_TIMEOUT_SEC:.0f}秒）—— "
-                            f"设备可能正被其他程序占用，已跳过")
+        if cap is None:
             continue
-        if r is not None:
-            out.append(r)
 
-    if timed_out:
-        logging.warning(f"以下索引被跳过（超时或无响应）: {', '.join(timed_out)}")
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        has_face = False
+        if det is not None:
+            hits = checked = 0
+            for _ in range(face_frames):
+                ok, fr = cap.read()
+                if not ok or fr is None:
+                    continue
+                checked += 1
+                det.setInputSize((fr.shape[1], fr.shape[0]))
+                _, faces = det.detect(fr)
+                if faces is not None and len(faces) > 0:
+                    hits += 1
+            has_face = checked > 0 and (hits / checked) >= 0.5
+        try:
+            cap.release()
+        except Exception:
+            pass
+        out.append({"index": i, "backend": info, "size": (w, h),
+                    "has_face": has_face,
+                    "name": names[i] if i < len(names) else ""})
+        logging.debug(f"枚举到摄像头 #{i}: {info} 有人脸={has_face}")
+
+    if skipped:
+        logging.warning(f"以下索引未扫描: {', '.join(skipped)}")
 
     # 有人脸的排前面
     out.sort(key=lambda c: (not c["has_face"], c["index"]))
+    logging.info(f"摄像头枚举完成: 找到 {len(out)} 个 -> "
+                 + ", ".join(f"#{c['index']}({c['backend']})" for c in out))
     return out
 
 
@@ -1397,6 +1421,13 @@ class HeartRateWebUI:
         self._poll_busy = threading.Lock()
         self._poll_skipped = 0
         self.vcam_error = None
+        # 摄像头枚举改为后台线程 —— 它要 10~17 秒，放在 build() 里会让
+        # 浏览器一直转圈，用户以为程序坏了
+        self._enum_thread = None
+        self._enum_ready = threading.Event()
+        # 用户选过的摄像头（避免刷新/重载把他的选择覆盖掉）
+        self._preferred_camera = None
+        self._user_picked = None
 
     # ---------- 模型与采集 ----------
     def load_models(self):
@@ -1478,9 +1509,10 @@ class HeartRateWebUI:
     def cam_choices(self, rescan=False):
         """列出可用摄像头，返回 (choices, default)。
 
-        结果会缓存 —— 枚举需要逐个打开设备并读帧，很慢，不能频繁调用。
+        结果会缓存 —— 枚举要逐个打开设备并读帧（实测 10~17 秒），绝不能
+        在界面构建时同步调用，否则程序看起来像卡死。改为后台线程枚举 +
+        前端 on_load_cameras 填充（见 _enum_worker）。
         """
-        import gradio as gr  # noqa: F401  (调用方需要 gr.update)
         if self._cam_cache is None or rescan:
             self._cam_cache = enumerate_cameras(max_index=self.max_index,
                                                 yunet_path=self.yunet_path)
@@ -1499,7 +1531,38 @@ class HeartRateWebUI:
             choices.append((label, c["index"]))
         if default is None:
             default = cams[0]["index"]
+        # 用户此前选过、且这颗摄像头仍可用 -> 优先，别把他选好的覆盖掉
+        if self._preferred_camera is not None:
+            if any(c["index"] == self._preferred_camera for c in cams):
+                default = self._preferred_camera
         return choices, default
+
+    def _preferred_default(self):
+        """当前应选中的摄像头：用户选过的 > 配置文件里的 > 枚举默认"""
+        if self._preferred_camera is None:
+            self._preferred_camera = self.load_saved().get("camera")
+        return self._preferred_camera
+
+    def start_enumeration(self):
+        """后台线程枚举摄像头（界面不阻塞）。
+
+        为什么不放在 build() 里: 枚举要 10~17 秒，同步做会让浏览器一直
+        转圈、用户以为程序坏了。前端 on_load_cameras 会在枚举完成后填充。
+        """
+        if self._enum_thread is not None and self._enum_thread.is_alive():
+            return
+        self._enum_thread = threading.Thread(target=self._enum_worker,
+                                             name="enum", daemon=True)
+        self._enum_thread.start()
+
+    def _enum_worker(self):
+        try:
+            self.cam_choices(rescan=True)
+            logging.info("后台枚举完成，等待前端拉取")
+        except Exception as e:
+            logging.error(f"后台枚举摄像头失败: {type(e).__name__}: {e}")
+        finally:
+            self._enum_ready.set()
 
     def on_refresh(self):
         """刷新摄像头列表（用户主动点击时才重新枚举）"""
@@ -1557,14 +1620,25 @@ class HeartRateWebUI:
         self.stop_capture()
         return "已停止采集（OSC 不再发送）"
 
-    def on_switch_camera(self, cam_index):
+    def on_pick_camera(self, cam_index):
+        """用户在下拉框里选了摄像头。
+
+        必须记住这个选择 —— 否则任何一次刷新/重载都会用 default 覆盖掉它，
+        表现就是"点选了反而没了"。
+        """
         idx = coerce_camera_index(cam_index)
         if idx is None:
             return "未选择摄像头"
+        self._user_picked = idx
+        self._preferred_camera = idx
         if not self.running or self.cam is None:
-            return "当前未在采集（点「开始」后再切换）"
+            return f"已选择摄像头 #{idx}　→　点「开始」生效"
         self.cam.set_camera(idx)
         return f"正在切换到摄像头 #{idx} ..."
+
+    def on_switch_camera(self, cam_index):
+        """保留旧接口名（内部与 on_pick_camera 一致）"""
+        return self.on_pick_camera(cam_index)
 
     def on_test_osc(self, value, osc_port, osc_addr):
         addr = osc_addr or OSC_ADDRESS
@@ -1777,25 +1851,71 @@ class HeartRateWebUI:
             return img
 
     def on_load_cameras(self):
-        """页面加载时枚举一次摄像头并填充下拉框（只跑一次，不参与轮询）"""
+        """填充摄像头下拉框（前端加载完成后调用）。
+
+        枚举是后台线程做的，这里只等结果（最多 ENUM_TOTAL_BUDGET_SEC+10 秒），
+        所以界面能立刻打开，不用干等十几秒。
+
+        关键: 若用户已经选过某颗摄像头，就**不要**改他的 value —— 之前无条件
+        写 value=default，把用户的选择覆盖掉（表现为"点了反而没了"）。
+
+        但 choices **必须**每次都下发: 枚举挪到后台后，服务端配置里这份
+        Dropdown 的初始 choices 是空的，新打开的页面只能靠这里拿到候选列表。
+        一开始我只下发 gr.update()（什么都不改），结果新页面永远拿不到
+        choices、下拉框一直是空的 —— 那是另一个 bug。
+        正确的组合是: 下发 choices，但已选过时不下发 value。
+        """
         import gradio as gr
+        # 等后台枚举完成（界面早已可见，这里只是补数据）
+        self._enum_ready.wait(timeout=ENUM_TOTAL_BUDGET_SEC + 10)
         try:
-            choices, default = self.cam_choices(rescan=(self._cam_cache is None))
+            choices, default = self.cam_choices()
             logging.info(f"摄像头列表: {[c[1] for c in choices]}  默认 #{default}")
             if not choices:
-                return gr.update(choices=[], value=None)
-            return gr.update(choices=choices, value=default)
+                return gr.update(choices=[], value=None,
+                                 info="没找到可用摄像头，点「刷新列表」重试")
+            hint = "★有人脸 的是能拍到你的那颗"
+            # 用户已选过、且那颗仍在列表里 -> 只下发 choices，保留他的 value
+            # （若这里也下发 value，会在页面重载时覆盖用户的选择）
+            if self._user_picked is not None and any(
+                    c[1] == self._user_picked for c in choices):
+                logging.info(f"下发 choices，保留用户已选 #{self._user_picked}")
+                return gr.update(choices=choices, info=hint)
+            return gr.update(choices=choices, value=default, info=hint)
         except Exception as e:
             logging.error(f"枚举摄像头失败: {type(e).__name__}: {e}")
-            return gr.update(choices=[], value=None)
+            return gr.update(choices=[], value=None,
+                             info=f"枚举失败: {type(e).__name__}")
 
     # ---------- 构建界面 ----------
+    def wait_for_enumeration(self, timeout=None):
+        """等后台枚举完成（最多 timeout 秒）"""
+        if timeout is None:
+            timeout = ENUM_TOTAL_BUDGET_SEC + 10
+        return self._enum_ready.wait(timeout=timeout)
+
     def build(self):
         import gradio as gr
         saved = self.load_saved()
+        self._preferred_camera = saved.get("camera")
+        # 界面构建前等枚举完成 —— 这样 choices 能作为组件的初始配置一起下发。
+        #
+        # 为什么不用"先建空界面、再由 demo.load 填充": Gradio 3.50 的前端在
+        # 组件初次渲染（choices 为空）之后再收到 choices 更新时会把下拉框
+        # 渲染成空的 —— 实测 API 返回的 JSON 完全正确
+        # （choices=[[label,0],[label,1]], value=0），但浏览器里就是空白的，
+        # info 文字却能更新。与其和框架这个行为纠缠，不如让它一开始就有值。
+        #
+        # 界面构建时 main_web 已经先给浏览器看过一个"正在检测摄像头"的过渡页，
+        # 所以这里等十几秒不会表现为"程序卡住"。
+        self.start_enumeration()
+        ok = self.wait_for_enumeration()
+        if not ok:
+            logging.warning("等待摄像头枚举超时，界面可能缺少摄像头列表")
         choices, default = self.cam_choices()
-        if saved.get("camera") is not None:
-            default = saved["camera"]
+        logging.info(f"建界面时摄像头列表: {[c[1] for c in choices]}  默认 #{default}")
+        if default is None and choices:
+            default = choices[0][1]
 
         with gr.Blocks(title="摄像头心率 → VRChat", css=WEB_CSS) as demo:
             gr.Markdown(
@@ -1824,10 +1944,12 @@ class HeartRateWebUI:
                     with gr.Row():
                         # type="value" 必须显式指定: 否则 Dropdown 会把选中的
                         # label 文本（如 "#0 640x480 ★有人脸"）传给回调，
-                        # 而不是我们放的索引值，导致 int() 解析失败
+                        # 而不是我们放的索引值，导致 int() 解析失败。
+                        # choices 在 build() 里已等枚举完成，所以这里是实值。
                         cam_dd = gr.Dropdown(label="摄像头", choices=choices,
                                              value=default, type="value",
-                                             scale=3)
+                                             scale=3,
+                                             info="★有人脸 的是能拍到你的那颗")
                         refresh_btn = gr.Button("刷新列表", scale=1)
 
             with gr.Accordion("参数设置（改完点开始生效）", open=False):
@@ -1898,7 +2020,9 @@ class HeartRateWebUI:
 
             # 事件绑定
             refresh_btn.click(self.on_refresh, outputs=[cam_dd])
-            cam_dd.change(self.on_switch_camera, inputs=[cam_dd], outputs=[msg])
+            # 用户主动改选 -> 记住它，之后任何刷新/重载都不再动 value
+            # （之前无条件写 value=default，导致"点了反而没了"）
+            cam_dd.change(self.on_pick_camera, inputs=[cam_dd], outputs=[msg])
             start_btn.click(self.on_start,
                             inputs=[cam_dd, osc_port, osc_addr, gate, smooth,
                                     cb_enable, cb_template, cb_interval, cb_sound,
@@ -1931,6 +2055,12 @@ class HeartRateWebUI:
 
     def launch(self, open_browser=True):
         self.load_models()
+        # 枚举摄像头要十几秒（build() 必须等它完成，理由见 build()）。
+        # 这里先把枚举挂到后台跑，并给终端打一行提示 —— 否则用户会以为程序
+        # 卡住了。浏览器在界面构建完成后再打开，打开即可用。
+        print()
+        print("  正在检测摄像头……（约 5~20 秒，取决于设备响应速度）")
+        self.start_enumeration()
         demo = self.build()
         url = f"http://{self.host}:{self.port}"
         print("\n" + "=" * 68)
