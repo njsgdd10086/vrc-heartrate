@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """FacePhys（rPPG）ONNX 推理的最小封装
 
 上游: https://github.com/KegangWangCCNU/FacePhys-Release
@@ -20,7 +26,6 @@
 from __future__ import annotations
 
 import numpy as np
-
 
 class FacePhysModel:
     """一个极薄的 ONNX 推理包装，接口与上游 inference.py 的 load_model_onnx 兼容"""
@@ -71,7 +76,6 @@ class FacePhysModel:
     @property
     def state_names(self):
         return list(self.init_state)
-
 
 def load_facephys(path, providers=None):
     """加载模型，返回可调用的 FacePhysModel（与上游签名一致）"""

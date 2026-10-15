@@ -1,32 +1,46 @@
-﻿"""缁嗙矑搴﹀墫鏋愰噰闆嗗惊鐜悇姝ラ鑰楁椂锛屽畾浣嶇湡姝ｇ殑鐡堕"""
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
+"""细粒度剖析采集循环各步骤耗时，定位真正的瓶颈
+
+实测结论（供参考）: cap.read() 往往占整条流水线约 85%，
+人脸检测约 6%，推理约 9%。所以帧率不够时先查读帧/后端，再查别处。
+
+用法:
+    python tools/profile_capture.py [摄像头索引]
+"""
 import importlib.util
 import os
 import statistics
 import sys
-import threading
 import time
 
-sys.path.insert(0, r"D:\deepseek_harness")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _s in ("stdout", "stderr"):
-    st = getattr(sys, _s, None)
-    if st is not None and hasattr(st, "reconfigure"):
+    _st = getattr(sys, _s, None)
+    if _st is not None and hasattr(_st, "reconfigure"):
         try:
-            st.reconfigure(encoding="utf-8", errors="replace")
+            _st.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
 
 import cv2
 import numpy as np
 
-B = r"D:\deepseek_harness"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CAM_INDEX = int(sys.argv[1]) if len(sys.argv) > 1 else 0
 
 print("=" * 74)
-print("A) 绾憚鍍忓ご璇诲彇閫熺巼锛堜笉璺戜换浣曟ā鍨嬶級")
+print("A) 纯摄像头读取速率（不跑任何模型）")
 print("=" * 74)
 for backend, name in ((cv2.CAP_DSHOW, "DSHOW"), (cv2.CAP_MSMF, "MSMF")):
-    cap = cv2.VideoCapture(0, backend)
+    cap = cv2.VideoCapture(CAM_INDEX, backend)
     if not cap.isOpened():
-        print(f"  {name}: 鎵撲笉寮€")
+        print(f"  {name}: 打不开")
+        cap.release()
         continue
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -43,24 +57,23 @@ for backend, name in ((cv2.CAP_DSHOW, "DSHOW"), (cv2.CAP_MSMF, "MSMF")):
         if r and fr is not None:
             n += 1
     dt = time.time() - t0
-    print(f"  {name}: {n} 甯?/ {dt:.1f}s = {n/dt:5.1f} fps")
+    print(f"  {name}: {n} 帧 / {dt:.1f}s = {n / dt:5.1f} fps")
     cap.release()
 
 print()
 print("=" * 74)
-print("B) 鍚勬楠ゅ崟鐙€楁椂锛堢敤鐪熷疄妯″瀷锛?)
+print("B) 各步骤单独耗时（用真实模型）")
 print("=" * 74)
 spec = importlib.util.spec_from_file_location(
-    "cam", r"D:\deepseek_harness\osc_heartrate_cam.py")
+    "cam", os.path.join(ROOT, "osc_heartrate_cam.py"))
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
-run = m.load_facephys(os.path.join(B, "models", "FacePhys.onnx"))
-det = cv2.FaceDetectorYN.create(
-    os.path.join(B, "models", "face_detection_yunet_2023mar.onnx"),
-    "", (320, 320), 0.6, 0.3, 5000)
+run = m.load_facephys(m.find_model("facephys"))
+det = cv2.FaceDetectorYN.create(m.opencv_safe_path(m.find_model("yunet")),
+                                "", (320, 320), 0.6, 0.3, 5000)
 
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
 for _ in range(10):
@@ -78,7 +91,6 @@ for i in range(60):
         continue
     h, w = frame.shape[:2]
 
-    # 浜鸿劯妫€娴嬶紙妯℃嫙姣?2 甯т竴娆★級
     if i % 2 == 0 or last_box is None:
         det.setInputSize((w, h))
         _, faces = det.detect(frame)
@@ -95,7 +107,8 @@ for i in range(60):
     ex = min(w, int(bx + bw)); ey = min(h, int(by + bh))
     if ex - sx < 8 or ey - sy < 8:
         continue
-    small = cv2.resize(frame[sy:ey, sx:ex], (36, 36), interpolation=cv2.INTER_AREA)
+    small = cv2.resize(frame[sy:ey, sx:ex], (36, 36),
+                       interpolation=cv2.INTER_AREA)
     rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
     t3 = time.perf_counter()
 
@@ -109,27 +122,30 @@ for i in range(60):
 
 cap.release()
 
+
 def stat(name, arr):
     if not arr:
-        print(f"  {name}: 鏃犳暟鎹?)
+        print(f"  {name}: 无数据")
         return 0.0
-    print(f"  {name:22s} 骞冲潎 {statistics.mean(arr):7.2f} ms   "
-          f"涓綅 {statistics.median(arr):7.2f}   鏈€澶?{max(arr):7.2f}")
+    print(f"  {name:22s} 平均 {statistics.mean(arr):7.2f} ms   "
+          f"中位 {statistics.median(arr):7.2f}   最大 {max(arr):7.2f}")
     return statistics.mean(arr)
 
-m_read = stat("cap.read() 璇诲抚", t_read)
-m_det = stat("浜鸿劯妫€娴?姣?甯?", t_det)
-m_crop = stat("瑁佸壀+棰勫鐞?, t_crop)
-m_infer = stat("FacePhys 鎺ㄧ悊", t_infer)
+
+m_read = stat("cap.read() 读帧", t_read)
+m_det = stat("人脸检测(每2帧)", t_det)
+m_crop = stat("裁剪+预处理", t_crop)
+m_infer = stat("FacePhys 推理", t_infer)
 print()
 total = m_read + m_det + m_crop + m_infer
-print(f"  鍚堣 {total:.2f} ms/甯? ->  鐞嗚涓婇檺 {1000/total:.1f} fps")
-print(f"  鍏朵腑璇诲抚鍗?{m_read/total*100:.0f}%锛屾娴嬪崰 {m_det/total*100:.0f}%锛?
-      f"鎺ㄧ悊鍗?{m_infer/total*100:.0f}%")
+if total > 0:
+    print(f"  合计 {total:.2f} ms/帧  ->  理论上限 {1000 / total:.1f} fps")
+    print(f"  读帧占 {m_read / total * 100:.0f}%，检测占 {m_det / total * 100:.0f}%，"
+          f"推理占 {m_infer / total * 100:.0f}%")
 
 print()
 print("=" * 74)
-print("C) 鍗曠嫭娴?estimate_bpm 鑰楁椂锛堟瘡绉掕皟鐢ㄤ竴娆★級")
+print("C) estimate_bpm 耗时（每秒调用一次）")
 print("=" * 74)
 vals = [float(np.sin(i / 5)) for i in range(900)]
 ts = [i / 30.0 for i in range(900)]
@@ -138,5 +154,4 @@ for _ in range(10):
     t0 = time.perf_counter()
     m.estimate_bpm(vals, ts)
     t.append((time.perf_counter() - t0) * 1000)
-print(f"  骞冲潎 {statistics.mean(t):.1f} ms   鏈€澶?{max(t):.1f} ms")
-print(f"  锛堟瘡绉掍竴娆★紝鎽婂埌 15fps 涓婄害 {statistics.mean(t)/15:.1f} ms/甯э級")
+print(f"  平均 {statistics.mean(t):.1f} ms   最大 {max(t):.1f} ms")

@@ -3,11 +3,10 @@
 # 只在你需要「虚拟摄像头输出」时才安装:
 #     pip install -r requirements-optional.txt
 #
-# ⚠️ 许可证提醒
-#   pyvirtualcam 是 GPL-2.0。若你把它打包进发行版，发行版整体会受到
-#   GPL-2.0 的约束。核心测心率功能**不依赖**它，所以以 MIT 分发时
-#   可以不装、不打包。
-#   详见 THIRD_PARTY_LICENSES.md。
+# 许可证说明
+#   pyvirtualcam 是 GPL-2.0；本项目整体是 GPL-3.0-or-later，两者兼容，
+#   没有许可证冲突，打包分发也不需要额外声明。
+#   （本项目曾是 MIT，那时与 GPL 组件有冲突；改 GPL-3.0 后已消解。）
 #
 #   另外注意: 运行时还需要系统里存在虚拟摄像头驱动 —— OBS Studio
 #   （GPL-2.0，提供 OBS Virtual Camera）或 UnityCapture（提供

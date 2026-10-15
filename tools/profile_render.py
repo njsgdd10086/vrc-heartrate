@@ -1,42 +1,57 @@
-﻿"""鐩存帴娴?_render_preview 鐨勭湡瀹炶€楁椂锛屼互鍙婂悇瀛愭楠ゅ崰姣?""
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
+"""剖析预览绘制各步骤的耗时
+
+背景: 曾误判"画面卡顿是绘制太慢"，实测各步骤都在毫秒级，
+真正的瓶颈是 cap.read()（占流水线约 85%）。这个脚本用来快速验证
+"瓶颈到底在哪一步"，避免凭直觉优化错方向。
+
+用法:
+    python tools/profile_render.py [摄像头索引]
+"""
 import importlib.util
 import os
 import statistics
 import sys
 import time
 
-sys.path.insert(0, r"D:\deepseek_harness")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for _s in ("stdout", "stderr"):
-    st = getattr(sys, _s, None)
-    if st is not None and hasattr(st, "reconfigure"):
+    _st = getattr(sys, _s, None)
+    if _st is not None and hasattr(_st, "reconfigure"):
         try:
-            st.reconfigure(encoding="utf-8", errors="replace")
+            _st.reconfigure(encoding="utf-8", errors="replace")
         except Exception:
             pass
 
 import cv2
 import numpy as np
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CAM_INDEX = int(sys.argv[1]) if len(sys.argv) > 1 else 0
+
 spec = importlib.util.spec_from_file_location(
-    "cam", r"D:\deepseek_harness\osc_heartrate_cam.py")
+    "cam", os.path.join(ROOT, "osc_heartrate_cam.py"))
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
-B = r"D:\deepseek_harness"
-ui = m.HeartRateWebUI(os.path.join(B, "models", "FacePhys.onnx"),
-                      os.path.join(B, "models", "face_detection_yunet_2023mar.onnx"))
+ui = m.HeartRateWebUI(m.find_model("facephys"), m.find_model("yunet"))
 ui.load_models()
-ui.start_capture(0, want_vcam=False)
-for _ in range(80):
+ui.start_capture(CAM_INDEX, want_vcam=False)
+for _ in range(120):
     if ui.cam.ui_stats().get("cam_opened") and ui.cam.frames_read > 5:
         break
     time.sleep(0.1)
-print(f"灏辩华: {ui.cam.cam_backend}")
+print(f"就绪: {ui.cam.cam_backend}")
 print()
 
 c = ui.cam
 print("=" * 74)
-print("1) _render_preview 鏁翠綋鑰楁椂锛堢敤鐪熷疄甯э級")
+print("1) _render_preview 整体耗时（用真实帧）")
 print("=" * 74)
 ts = []
 for _ in range(30):
@@ -44,19 +59,20 @@ for _ in range(30):
     c._render_preview()
     ts.append((time.perf_counter() - t0) * 1000)
     time.sleep(0.02)
-print(f"  骞冲潎 {statistics.mean(ts):7.2f} ms   涓綅 {statistics.median(ts):7.2f}   "
-      f"鏈€澶?{max(ts):7.2f}")
-print(f"  -> 涓婇檺 {1000/statistics.mean(ts):.1f} fps")
+print(f"  平均 {statistics.mean(ts):7.2f} ms   中位 {statistics.median(ts):7.2f}   "
+      f"最大 {max(ts):7.2f}")
+if statistics.mean(ts) > 0:
+    print(f"  -> 上限 {1000 / statistics.mean(ts):.0f} fps")
 
 print()
 print("=" * 74)
-print("2) 鎷嗚В鍚勫瓙姝ラ")
+print("2) 拆解各子步骤")
 print("=" * 74)
 frame = c._pv_raw if c._pv_raw is not None else np.zeros((480, 640, 3), np.uint8)
 small = c._pv_crop if c._pv_crop is not None else np.zeros((36, 36, 3), np.uint8)
-box = c._pv_box or (100, 100, 300, 400)
-sx, sy, ex, ey = box
+sx, sy, ex, ey = c._pv_box or (100, 100, 300, 400)
 tr = c._pv_trace or [float(i % 7) for i in range(300)]
+
 
 def timeit(label, fn, n=40):
     arr = []
@@ -64,15 +80,20 @@ def timeit(label, fn, n=40):
         t0 = time.perf_counter()
         fn()
         arr.append((time.perf_counter() - t0) * 1000)
-    print(f"  {label:34s} {statistics.mean(arr):7.3f} ms  (max {max(arr):7.2f})")
+    print(f"  {label:32s} {statistics.mean(arr):7.3f} ms  (最大 {max(arr):7.2f})")
     return statistics.mean(arr)
 
-t_copy = timeit("frame.copy()", lambda: frame.copy())
-t_rect = timeit("cv2.rectangle", lambda: cv2.rectangle(frame.copy(), (sx, sy), (ex, ey), (0, 255, 0), 2))
-t_small = timeit("thumbnail resize 36->108",
-                 lambda: cv2.resize(small, (108, 108), interpolation=cv2.INTER_NEAREST))
-t_put = timeit("cv2.putText x3", lambda: [cv2.putText(frame, "test", (12, 40),
-               cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3) for _ in range(3)])
+
+timeit("frame.copy()", lambda: frame.copy())
+timeit("cv2.rectangle",
+       lambda: cv2.rectangle(frame.copy(), (sx, sy), (ex, ey), (0, 255, 0), 2))
+timeit("缩略图 resize 36->108",
+       lambda: cv2.resize(small, (108, 108), interpolation=cv2.INTER_NEAREST))
+timeit("cv2.putText x3",
+       lambda: [cv2.putText(frame, "t", (12, 40), cv2.FONT_HERSHEY_SIMPLEX,
+                            1.2, (0, 255, 0), 3) for _ in range(3)])
+
+
 def wave():
     if len(tr) < 10:
         return
@@ -80,6 +101,8 @@ def wave():
     x0, y0 = frame.shape[1] - tw - 12, 12
     a = np.asarray(tr, dtype=np.float32)
     a = a[np.isfinite(a)]
+    if len(a) < 2:
+        return
     a = a - a.min()
     if a.max() > 1e-6:
         a = a / a.max()
@@ -87,14 +110,28 @@ def wave():
                      y0 + th - 4 - int(v * (th - 8))) for i, v in enumerate(a)],
                    dtype=np.int32)
     cv2.polylines(frame, [pts], False, (0, 255, 128), 1)
-t_wave = timeit("娉㈠舰 polylines (300鐐?", wave)
-t_cvt = timeit("cvtColor BGR->RGB", lambda: cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-t_jpg = timeit("jpeg_frame() 鍙栧浘", lambda: c.jpeg_frame())
+
+
+timeit("波形 polylines", wave)
+timeit("cvtColor BGR->RGB", lambda: cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+timeit("jpeg_frame() 取图", lambda: c.jpeg_frame())
 
 print()
-print(f"  鍙瀛愭楠ゅ悎璁?{t_copy + t_rect + t_small + t_put + t_wave + t_cvt:.2f} ms")
-print(f"  鑰?_render_preview 瀹炴祴 {statistics.mean(ts):.2f} ms")
+print("=" * 74)
+print("3) 对比: 真正的瓶颈在哪")
+print("=" * 74)
+t = []
+for _ in range(30):
+    t0 = time.perf_counter()
+    c.cap.read()
+    t.append((time.perf_counter() - t0) * 1000)
+mark = timeit("cap.read() 读帧", lambda: None, n=1)
+print(f"  {'cap.read() 实测':32s} {statistics.mean(t):7.2f} ms  "
+      f"(中位 {statistics.median(t):.2f})")
+print()
+print("  说明: 读帧通常比上面所有绘制步骤加起来还慢一个数量级。")
+print("        画面卡顿时优先查读帧与后端选择，而不是绘制。")
 
 ui.stop_capture()
 print()
-print("宸插仠姝?)
+print("已停止")

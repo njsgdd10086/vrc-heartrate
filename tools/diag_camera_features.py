@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """测试 IR Camera（笔记本内置）能否用于心率测量
 
 如果可用，就可以: 面补用 4M HD Camera，心率用 IR Camera，互不抢占。

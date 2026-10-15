@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """确认 OpenCV 的索引到底对应哪个 DirectShow 设备
 
 做法: 用 pygrabber 式的 DirectShow 枚举拿到"名称 + 设备路径(moniker)"，

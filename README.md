@@ -219,20 +219,40 @@ python osc_heartrate_cam.py --size 1280x720 # 指定首选分辨率
 
 ## 许可证
 
-本程序代码：[MIT](LICENSE)
+本项目采用 **[GPL-3.0-or-later](LICENSE)**（GNU 通用公共许可证第 3 版或更高版本）。
+版权声明与选择该许可证的原因见 [COPYRIGHT.md](COPYRIGHT.md)。
 
-### ⚠️ 关于虚拟摄像头功能的许可证
+### 为什么是 GPL-3.0（而不是 MIT，也不是 GPL-2.0）
 
-「虚拟摄像头输出」依赖 [pyvirtualcam](https://github.com/letmaik/pyvirtualcam)，
-它是 **GPL-2.0**（传染性许可证，注意是 v2 不是 v3）。为此本项目做了拆分：
+本项目依赖的组件对许可证版本的要求相互矛盾：
 
-- **核心测心率功能完全不依赖 pyvirtualcam** —— 代码里是延迟导入，
-  只有启用虚拟摄像头时才会 `import`
-- 因此以 MIT 分发时，**可以不安装、不打包**它
-- 如果你打包了它，发行版整体需遵守 GPL-2.0，请在 Release 里声明
+| 组件 | 许可证 | 与 MIT 项目 | 与 GPL-2.0-only | 与 GPL-3.0 |
+|---|---|---|---|---|
+| [pyvirtualcam](https://github.com/letmaik/pyvirtualcam) | GPL-2.0 | ✗ 冲突 | ✓ | ✓ |
+| [OpenCV](https://opencv.org/) | Apache-2.0 | ✓ | ✗ **不兼容** | ✓ |
+| [gradio](https://gradio.app/) | Apache-2.0 | ✓ | ✗ **不兼容** | ✓ |
+| onnxruntime / scipy / numpy / Pillow | MIT / BSD | ✓ | ✓ | ✓ |
 
-另外，虚拟摄像头还需要系统里存在一个**虚拟摄像头驱动**。以下任一即可，
-程序会自动选用可用的那个（两个本项目都不打包）：
+- 用 MIT：与 GPL-2.0 的 pyvirtualcam **冲突**（这正是之前的问题）
+- 用 GPL-2.0-only：与 Apache-2.0 的 OpenCV / gradio **不兼容**
+  （FSF 明确认定；Apache-2.0 的专利与赔偿条款属于 GPLv2 第 6 条禁止的"进一步限制"）
+- **用 GPL-3.0：以上全部兼容** —— 这是唯一能同时容纳它们的版本
+
+所以本项目整体为 GPL-3.0-or-later，源文件均带 SPDX 标识。
+
+### 这意味着什么
+
+- 你可以自由使用、修改、再分发，**包括商用**
+- 但**再分发时必须提供完整源代码**，并以同样的 GPL 条款授权
+- 不能把本项目改造成闭源专有软件再分发
+
+无需为 pyvirtualcam 单独做任何声明 —— 整个项目本来就是 GPL。
+
+### 虚拟摄像头还需要一个系统级驱动
+
+`pyvirtualcam` 只是"生产者"，真正对外的设备由系统里已注册的
+DirectShow 过滤器提供。以下任一即可，程序会自动选用可用的那个
+（两个本项目都**不打包**）：
 
 | 提供方 | 设备名 | 许可证 |
 |---|---|---|
@@ -241,8 +261,16 @@ python osc_heartrate_cam.py --size 1280x720 # 指定首选分辨率
 
 所以**并非必须安装 OBS**；而且无论用哪个，**都不需要该软件处于运行状态**。
 
-第三方组件（FacePhys 模型含**隐私保护附加条款**）的完整说明见
+### 第三方组件
+
+[FacePhys](https://github.com/KegangWangCCNU/FacePhys-Release) 模型（MIT +
+**隐私保护附加条款**）、YuNet 模型等第三方组件的完整说明见
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
+
+> 说明: FacePhys 模型的许可证含使用限制（要求生物特征推理本地完成等），
+> 与 GPL 的兼容性可能存在争议。模型不是本项目的代码、无法由本项目重新授权，
+> 因此其条款随模型保留在 `models/FacePhys-LICENSE.txt`。若你要商用，
+> 建议自行确认这一点。
 
 ## 致谢
 

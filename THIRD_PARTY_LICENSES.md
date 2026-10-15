@@ -1,7 +1,12 @@
 # 第三方组件许可证与约束
 
-本仓库自身代码为 MIT（见 [LICENSE](LICENSE)），但**依赖的模型和库有各自条款**。
-分发本项目（尤其是打包成 exe 分发）前请务必阅读本文。
+本仓库自身代码为 **GPL-3.0-or-later**（见 [LICENSE](LICENSE)）——
+选择该版本的原因见 [README 的许可证章节](README.md#许可证)。
+此外**依赖的模型和库各有自己的条款**，分发本项目（尤其打包成 exe）前请阅读本文。
+
+> 为什么项目整体是 GPL 而不是 MIT: 本项目依赖 GPL-2.0 的 pyvirtualcam 与
+> Apache-2.0 的 OpenCV / gradio。MIT 与前者冲突，GPL-2.0-only 与后两者冲突，
+> **只有 GPL-3.0 能同时容纳三者**。详见 README。
 
 ---
 
@@ -75,15 +80,32 @@
   - 核实依据: 包元数据 classifier 为
     `License :: OSI Approved :: GNU General Public License v2 (GPLv2)`，
     上游仓库 LICENSE 为 GPL v2 全文（2026-10 核实）
-  - ⚠️ **注意是 v2 不是 v3** —— GPL-2.0 与 GPL-3.0 条款不同（例如专利与
-    反 Tivoization 条款），声明时必须写准确版本
-- **⚠️ 重要**: GPL 是**传染性**许可证。若你分发打包了 pyvirtualcam 的
-  二进制，需注意 GPL 的兼容性要求。
-- **本项目如何处理**: `pyvirtualcam` 只在用户启用「虚拟摄像头输出」时才被
-  `import`，属于**可选功能**。若你要以宽松许可证（如 MIT）分发，建议：
-  - 要么在文档中明确声明包含 GPL-2.0 组件及其影响
-  - 要么提供**不含 pyvirtualcam** 的构建（此时虚拟摄像头功能不可用，
-    但核心测心率功能完全正常）
+  - ⚠️ **注意是 v2 不是 v3** —— 两个版本的条款不同（专利与反 Tivoization
+    条款），引用时必须写准确版本
+- **本项目如何处理**: 本项目整体采用 **GPL-3.0-or-later**（见 [LICENSE](LICENSE)），
+  与 GPL-2.0 的 pyvirtualcam 完全兼容，不存在许可证冲突。
+- `pyvirtualcam` 在代码里仍是**延迟导入**，所以你从源码运行时可以不装它 ——
+  此时「启用虚拟摄像头输出」不可用，其余功能完全正常。这是为了少装依赖，
+  不是许可证上的需要。
+
+### 为什么项目整体用 GPL-3.0，而不是 MIT 或 GPL-2.0
+
+本项目同时依赖的组件对 GPL 版本要求相互矛盾：
+
+| 组件 | 许可证 | 与 MIT 项目 | 与 GPL-2.0-only | 与 GPL-3.0 |
+|---|---|---|---|---|
+| pyvirtualcam | GPL-2.0 | ✗ **冲突** | ✓ | ✓ |
+| OpenCV | Apache-2.0 | ✓ | ✗ **不兼容** | ✓ |
+| gradio | Apache-2.0 | ✓ | ✗ **不兼容** | ✓ |
+| onnxruntime / scipy / numpy / Pillow | MIT / BSD | ✓ | ✓ | ✓ |
+
+- **MIT** 与 GPL-2.0 的 pyvirtualcam 冲突（本项目最初的问题）
+- **GPL-2.0-only** 与 Apache-2.0 的 OpenCV / gradio 不兼容:
+  Apache-2.0 含专利终止、赔偿等附加条件，而 GPLv2 第 6 条禁止对再分发
+  附加任何进一步限制（FSF 明确认定这两者不兼容）
+- **GPL-3.0 同时兼容以上全部** —— 唯一可行的选择
+
+所以本项目定为 GPL-3.0-or-later，源文件带 SPDX 标识。
 
 ### 虚拟摄像头还需要系统级的驱动
 
@@ -124,11 +146,12 @@ DirectShow 过滤器提供。Windows 上 pyvirtualcam 内置两个后端，按�
 
 如果你要发布 exe：
 
-- [ ] 在 Release 说明中包含本文件
-- [ ] 在 Release 说明中包含 `models/FacePhys-LICENSE.txt`
+- [ ] 在 Release 说明中声明本项目为 **GPL-3.0-or-later**，并提供源码链接
+      （GPL 要求: 分发二进制时必须能获取对应源码）
+- [ ] 附上本文件与 `LICENSE`
+- [ ] 附上 `models/FacePhys-LICENSE.txt`
 - [ ] 明确告知用户：心率数据会发送到本机 VRChat（联网平台）
 - [ ] 若启用虚拟摄像头功能，画面会暴露给本机其他程序 —— 已在 UI 中提示
-- [ ] 若包含 pyvirtualcam，声明 **GPL-2.0** 组件（不是 GPL-3.0，版本别写错）
 - [ ] 不要移除 `models/` 下的许可证文件
 
 > 以上为工程层面的整理，**不构成法律意见**。商业用途请咨询专业人士。

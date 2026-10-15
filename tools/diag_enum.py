@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """诊断摄像头枚举问题：逐个索引、逐个后端、逐个分辨率地测，定位卡在哪
 
 枚举只返回 1 个摄像头，但设备管理器里有 3 个物理摄像头 + 多个虚拟摄像头。
@@ -41,7 +47,6 @@ print("  " + "-" * 70)
 
 results = {}
 
-
 def try_one(idx, backend_name, backend):
     """返回 (成功?, 描述, 耗时秒)"""
     t0 = time.time()
@@ -73,9 +78,7 @@ def try_one(idx, backend_name, backend):
         return False, f"打开但 0/{total} 有效帧 ({w}x{h})", dt
     return True, f"{w}x{h} {good}/{total} 有效帧", dt
 
-
 lock = threading.Lock()
-
 
 def run(idx, bname, backend):
     key = (idx, bname)
@@ -87,7 +90,6 @@ def run(idx, bname, backend):
         results[key] = (ok, desc, dt)
         flag = "OK " if ok else "   "
         print(f"  {flag}#{idx:<3}{bname:<8}{desc:<34}{dt:5.1f}s", flush=True)
-
 
 for idx in range(6):
     for bname, backend in (("MSMF", cv2.CAP_MSMF), ("DSHOW", cv2.CAP_DSHOW)):

@@ -265,22 +265,45 @@ smoothness.
 
 ## License
 
-Project code: [MIT](LICENSE)
+This project is licensed under **[GPL-3.0-or-later](LICENSE)**
+(GNU General Public License version 3 or later).
+See [COPYRIGHT.md](COPYRIGHT.md) for the copyright notice and rationale.
 
-### ⚠️ Virtual camera feature and GPL
+### Why GPL-3.0 (and not MIT, nor GPL-2.0)
 
-The virtual camera output depends on
-[pyvirtualcam](https://github.com/letmaik/pyvirtualcam), which is **GPL-2.0**
-(note: version 2, not 3). This project is structured to keep that optional:
+The dependencies impose conflicting license-version requirements:
 
-- Core heart-rate measurement does **not** depend on pyvirtualcam — it is
-  imported lazily, only when you enable the virtual camera
-- So for an MIT release you can simply not install or bundle it
-- If you do bundle it, the distribution as a whole is subject to GPL-2.0 —
-  state that in your release notes
+| Component | License | With MIT project | With GPL-2.0-only | With GPL-3.0 |
+|---|---|---|---|---|
+| [pyvirtualcam](https://github.com/letmaik/pyvirtualcam) | GPL-2.0 | ✗ conflict | ✓ | ✓ |
+| [OpenCV](https://opencv.org/) | Apache-2.0 | ✓ | ✗ **incompatible** | ✓ |
+| [gradio](https://gradio.app/) | Apache-2.0 | ✓ | ✗ **incompatible** | ✓ |
+| onnxruntime / scipy / numpy / Pillow | MIT / BSD | ✓ | ✓ | ✓ |
 
-The feature additionally needs a system-level **virtual camera driver**. Either
-of these works, and the app picks whichever is registered (neither is bundled):
+- **MIT**: conflicts with GPL-2.0 pyvirtualcam — this was the original problem
+- **GPL-2.0-only**: incompatible with Apache-2.0 OpenCV / gradio
+  (the FSF considers Apache-2.0's patent and indemnification terms an
+  additional restriction, which GPLv2 §6 forbids)
+- **GPL-3.0**: compatible with all of the above — the only version that works
+
+Hence the whole project is GPL-3.0-or-later, with SPDX identifiers in the
+source files.
+
+### What this means
+
+- You may use, modify and redistribute it freely, **including commercially**
+- If you redistribute it, you **must provide the complete source code** under
+  the same GPL terms
+- You may not turn it into a closed-source proprietary product
+
+No separate declaration is needed for pyvirtualcam — the project as a whole is
+already GPL.
+
+### The virtual camera also needs a system-level driver
+
+`pyvirtualcam` is only the producer; the actual device is provided by a
+DirectShow filter registered in the system. Either of these works, and the app
+picks whichever is registered (neither is bundled):
 
 | Provider | Device name | License |
 |---|---|---|
@@ -289,8 +312,17 @@ of these works, and the app picks whichever is registered (neither is bundled):
 
 So OBS is **not** strictly required, and neither program needs to be running.
 
-Full third-party terms (including FacePhys's privacy addendum) are in
+### Third-party components
+
+Full terms for the [FacePhys](https://github.com/KegangWangCCNU/FacePhys-Release)
+model (MIT + **privacy protection addendum**), the YuNet model and others are in
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+> Note: the FacePhys license carries usage restrictions (local-only biometric
+> inference, etc.) whose GPL compatibility is arguably debatable. The model is
+> not this project's code and cannot be relicensed by it, so its terms are kept
+> alongside the model in `models/FacePhys-LICENSE.txt`. If you intend to use
+> this commercially, verify that point yourself.
 
 ## Credits
 

@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """发布 GitHub Release（用 Python 处理 UTF-8 与长文本，避开 PowerShell 的编码坑）
 
 用法:
@@ -14,7 +20,6 @@ import urllib.error
 import urllib.request
 
 API = "https://api.github.com"
-
 
 def request(url, token, method="GET", data=None, ctype="application/json",
             raw=None):
@@ -40,7 +45,6 @@ def request(url, token, method="GET", data=None, ctype="application/json",
             return e.code, {"raw": body}
     except Exception as e:
         return 0, {"error": f"{type(e).__name__}: {e}"}
-
 
 def main():
     ap = argparse.ArgumentParser()
@@ -124,7 +128,6 @@ def main():
 
     print("\n完成")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

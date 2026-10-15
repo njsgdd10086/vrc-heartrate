@@ -1,4 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """PyInstaller 打包配置: 摄像头心率 → VRChat (Gradio 网页版)
 
 用法（在仓库根目录执行）:
@@ -11,7 +18,7 @@
   2) onnxruntime 的 DLL 必须完整，且打包后要用 fix_msvc_dlls.py 修正
      MSVC 运行时（否则报 "DLL 初始化例程失败"，原因见 docs/BUILD.md 坑 1）
   3) 排除 torch/tensorflow 等无关大依赖，显著减小体积
-  4) pyvirtualcam 是 GPL-2.0 —— 要以 MIT 分发就删掉第 3c 段
+  4) 许可证: 本项目整体 GPL-3.0-or-later，见仓库根目录 LICENSE
 """
 import os
 import re
@@ -31,6 +38,20 @@ hiddenimports = []
 datas += [(os.path.join(ROOT, "models", "FacePhys.onnx"), "models")]
 datas += [(os.path.join(ROOT, "models", "face_detection_yunet_2023mar.onnx"),
            "models")]
+
+# --- 1b) 随包附带许可证与说明 ---
+# GPL 要求分发二进制时随附许可证；FacePhys 的附加条款要求保留其许可证原文。
+# 缺这些文件不报错，但发行包会不合规，所以一并打进去。
+for _f in ("LICENSE", "COPYRIGHT.md", "THIRD_PARTY_LICENSES.md",
+           "README.md", "README_EN.md"):
+    _p = os.path.join(ROOT, _f)
+    if os.path.isfile(_p):
+        datas += [(_p, ".")]
+    else:
+        print(f"[spec] 警告: 缺少 {_f}（发行包将不含该文件）")
+_lic = os.path.join(ROOT, "models", "FacePhys-LICENSE.txt")
+if os.path.isfile(_lic):
+    datas += [(_lic, "models")]
 
 # --- 2) gradio 前端资源（templates 里有 700+ 个文件，缺一个页面就白屏）---
 datas += collect_data_files("gradio", includes=["templates/**",
@@ -68,7 +89,6 @@ _MSVC_RE = re.compile(
 _MSVC_CANON = re.compile(r"^(msvcp140|vcruntime140|concrt140)(_\d+)?", re.I)
 _SYS32 = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "System32")
 
-
 def _msvc_key(dest):
     """把 '_1'、'-hash' 等归一成真正的 DLL 名（用于去 System32 取正确版本）"""
     b = os.path.basename(dest)
@@ -76,7 +96,6 @@ def _msvc_key(dest):
     if not m:
         return None
     return f"{m.group(1).lower()}{m.group(2) or ''}.dll"
-
 
 _removed, _kept = [], []
 for _b in binaries:
@@ -105,8 +124,8 @@ for _n, _src in _removed:
 # --- 3c) pyvirtualcam: 虚拟摄像头输出 ---
 # 它自带原生 DLL（Windows 上是 OBS 虚拟摄像头协议的实现），
 # 不收集的话运行时会报找不到后端。
-# 注意: pyvirtualcam 是 GPL-2.0。要以 MIT 分发就删掉这一段，
-#       核心测心率功能不依赖它（代码里是延迟导入）。
+# 许可证: pyvirtualcam 是 GPL-2.0，本项目整体是 GPL-3.0-or-later，
+#         两者兼容，打包它不需要额外处理。
 datas += collect_data_files("pyvirtualcam")
 binaries += collect_dynamic_libs("pyvirtualcam")
 hiddenimports += ["pyvirtualcam", "pyvirtualcam.camera"]

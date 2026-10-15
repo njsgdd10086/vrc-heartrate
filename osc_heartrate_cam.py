@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """
 摄像头 rPPG 心率 → VRChat OSC 桥接（基于 FacePhys）
 
@@ -92,7 +98,6 @@ CHATBOX_SOUND = False
 # 绝不因为日志问题让程序起不来。
 LOG_FILE = None
 
-
 def setup_logging():
     """配置日志：控制台 + 文件（文件失败自动降级）"""
     global LOG_FILE
@@ -132,10 +137,8 @@ def setup_logging():
             continue
     # 全失败也不影响运行
 
-
 setup_logging()
 shutdown_event = asyncio.Event()
-
 
 # ==================== 摄像头枚举与质量探测 ====================
 # 教训: cap.isOpened() 返回 True 完全不代表能抓到帧。
@@ -155,7 +158,6 @@ shutdown_event = asyncio.Event()
 PROBE_TIMEOUT_SEC = 5.0        # 单次「打开 + 抓帧」时限
 VERIFY_TIMEOUT_SEC = 3.0       # 采纳句柄前的复核时限
 ENUM_TOTAL_BUDGET_SEC = 45.0   # 整轮枚举的总预算（兜底，正常用不到）
-
 
 def _run_with_timeout(fn, timeout):
     """在守护线程里跑 fn，超时返回 (None, True)。
@@ -185,7 +187,6 @@ def _run_with_timeout(fn, timeout):
         raise box["e"]
     return box.get("r"), False
 
-
 def _verify_cap(cap, check=5):
     """在被采纳前再验证一次：真正能连续读到有效帧才算数。
 
@@ -207,7 +208,6 @@ def _verify_cap(cap, check=5):
         return bool(r) and not timed_out
     except Exception:
         return False
-
 
 def try_open_once(index, backend, width, height, warmup=5, check=8,
                   timeout=PROBE_TIMEOUT_SEC):
@@ -270,7 +270,6 @@ def try_open_once(index, backend, width, height, warmup=5, check=8,
         return None, f"超时(>{timeout:.0f}s，该后端阻塞)", 0.0
     return result if result else (None, "无结果", 0.0)
 
-
 def open_camera(index, prefer_size=None, verbose=True, fast=False):
     """打开摄像头并确保真能抓到有效帧。
 
@@ -331,7 +330,6 @@ def open_camera(index, prefer_size=None, verbose=True, fast=False):
             logging.error(f"    {a}")
     return None, None
 
-
 def lock_camera(cap):
     """尝试关闭自动曝光/自动白平衡并固定手动参数。返回做了哪些改动。"""
     actions = []
@@ -357,7 +355,6 @@ def lock_camera(cap):
                 break
     return actions
 
-
 class AsyncOSCSender:
     """基于 asyncio UDP 的简易 OSC 发送器，仅发送 float"""
 
@@ -382,7 +379,6 @@ class AsyncOSCSender:
         if self.transport:
             self.transport.close()
 
-
 def send_osc_once(ip, port, address, value):
     """单次发送一条 OSC 浮点消息（供 Web UI 的测试按钮使用）。
 
@@ -401,14 +397,12 @@ def send_osc_once(ip, port, address, value):
     except Exception as e:
         return False, f"发送失败: {type(e).__name__}: {e}"
 
-
 def osc_pad(data: bytes) -> bytes:
     """OSC 字符串补齐: 末尾至少一个 \\0，且总长度是 4 的倍数"""
     out = data + b"\x00"
     while len(out) % 4:
         out += b"\x00"
     return out
-
 
 def build_chatbox_packet(text: str, send_immediately: bool = True,
                          play_sound: bool = False) -> bytes:
@@ -427,7 +421,6 @@ def build_chatbox_packet(text: str, send_immediately: bool = True,
     args += b"\x00\x00\x00"
     return addr + tags + args
 
-
 def send_chatbox(ip, port, text, send_immediately=True, play_sound=False):
     """发送一条 Chatbox 消息，返回 (成功, 说明)"""
     import socket
@@ -441,7 +434,6 @@ def send_chatbox(ip, port, text, send_immediately=True, play_sound=False):
         return True, f"已发送 Chatbox: {text}"
     except Exception as e:
         return False, f"Chatbox 发送失败: {type(e).__name__}: {e}"
-
 
 # ==================== 一维卡尔曼（平滑人脸框） ====================
 class Kalman1D:
@@ -470,7 +462,6 @@ class Kalman1D:
         """丢失检测时用的"半跟随"，避免框长期停在旧位置"""
         self.x += alpha * (float(z) - self.x)
         return self.x
-
 
 # ==================== 心率估计 ====================
 def estimate_bpm(values, timestamps, fs_uniform=UNIFORM_FS, prev_bpm=None):
@@ -584,7 +575,6 @@ def estimate_bpm(values, timestamps, fs_uniform=UNIFORM_FS, prev_bpm=None):
         "win_s": span,
     }
     return float(bpm), ac_peak, info
-
 
 # ==================== 采集 + 推理线程 ====================
 class CameraRPPG:
@@ -1121,7 +1111,6 @@ class CameraRPPG:
                 "trace": list(self._pv_trace),
             }
 
-
 # ==================== 心率平滑与超时动画 ====================
 class HeartrateSmoother:
     def __init__(self, osc, osc_address, source: CameraRPPG):
@@ -1192,7 +1181,6 @@ class HeartrateSmoother:
         except asyncio.CancelledError:
             pass
 
-
 def config_path():
     """配置保存位置（记住上次选的摄像头）"""
     d = os.path.join(os.path.expanduser("~"), ".vrc_heartrate_cam")
@@ -1201,7 +1189,6 @@ def config_path():
     except Exception:
         return None
     return os.path.join(d, "config.json")
-
 
 def save_camera_index(index):
     p = config_path()
@@ -1214,7 +1201,6 @@ def save_camera_index(index):
     except Exception:
         pass
 
-
 def load_camera_index():
     p = config_path()
     if not p or not os.path.isfile(p):
@@ -1226,7 +1212,6 @@ def load_camera_index():
         return int(v) if v is not None else None
     except Exception:
         return None
-
 
 def coerce_camera_index(v):
     """把下拉框的值统一成索引整数。
@@ -1247,7 +1232,6 @@ def coerce_camera_index(v):
         return int(s)
     except Exception:
         return None
-
 
 def get_camera_names():
     """取摄像头名称，顺序与 OpenCV 的索引一致。
@@ -1285,7 +1269,6 @@ def get_camera_names():
         logging.debug(f"获取摄像头名称失败: {e}")
         return []
 
-
 def camera_label(index, name):
     """给设备名加上类型提示，减少用户选错"""
     if not name:
@@ -1301,11 +1284,9 @@ def camera_label(index, name):
         tag = "  [红外]"
     return f"#{index}  {name}{tag}"
 
-
 def _probe_with_timeout(fn, timeout):
     """兼容旧调用名（实际实现在 _run_with_timeout）"""
     return _run_with_timeout(fn, timeout)
-
 
 def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
     """枚举可用摄像头，并顺带检查每个能否看到人脸。
@@ -1384,14 +1365,12 @@ def enumerate_cameras(max_index=6, yunet_path=None, face_frames=3):
                  + ", ".join(f"#{c['index']}({c['backend']})" for c in out))
     return out
 
-
 # ==================== Web UI (Gradio) ====================
 WEB_CSS = """
 .gr-image img { image-rendering: auto; }
 #bpm-box { text-align: center; }
 #bpm-val { font-size: 46px; font-weight: 700; line-height: 1.1; }
 """
-
 
 class HeartRateWebUI:
     """Gradio 网页界面。
@@ -2087,10 +2066,15 @@ class HeartRateWebUI:
         if LOG_FILE:
             print(f"  日志文件: {LOG_FILE}")
             print("  （出问题时请把这个文件的内容附到 Issue 里）")
+        print("-" * 68)
+        # GPL-3.0 第 5(d) 条: 交互式程序应显示版权与无担保声明
+        print(f"  vrc-heartrate v{__version__}  "
+              f"Copyright (C) 2026 njsgdd10086")
+        print("  本程序为自由软件，采用 GPL-3.0-or-later，**不提供任何担保**。")
+        print("  你可以再分发，但需保留同样的许可条款。完整条款见 LICENSE。")
         print("=" * 68 + "\n")
         demo.queue().launch(server_name=self.host, server_port=self.port,
                             inbrowser=open_browser, show_api=False)
-
 
 def load_facephys(path):
     """加载 FacePhys 模型。
@@ -2121,16 +2105,13 @@ def load_facephys(path):
                       for i in sess.get_inputs()[2:]}
     return run
 
-
 def resource_paths():
     here = os.path.dirname(os.path.abspath(__file__))
     if getattr(sys, "frozen", False):
         here = getattr(sys, "_MEIPASS", here)
     return here
 
-
 _SAFE_PATH_CACHE = {}
-
 
 def opencv_safe_path(path):
     """给 OpenCV 一个纯 ASCII 的模型路径。
@@ -2168,7 +2149,6 @@ def opencv_safe_path(path):
         logging.warning(f"复制模型到 ASCII 路径失败: {e}，将直接尝试原路径")
         return path
 
-
 def find_free_port(host, start_port, tries=20):
     """找一个可用端口。
 
@@ -2188,7 +2168,6 @@ def find_free_port(host, start_port, tries=20):
             continue
     return None
 
-
 def find_model(name):
     """按优先级查找模型文件，返回第一个存在的路径（找不到返回首选路径）。
 
@@ -2207,7 +2186,6 @@ def find_model(name):
         if os.path.isfile(p):
             return p
     return cands[0]
-
 
 def main_web(args):
     """启动网页界面（本程序唯一的运行模式）"""
@@ -2282,7 +2260,6 @@ def main_web(args):
         ui.stop_capture()
     return 0
 
-
 def parse_size(s):
     """解析 '1280x720' 形式的分辨率"""
     if not s:
@@ -2293,7 +2270,6 @@ def parse_size(s):
     except Exception:
         logging.warning(f"无法解析分辨率 {s!r}，将使用自动模式")
         return None
-
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -2311,7 +2287,6 @@ def parse_args():
     p.add_argument("--no-browser", action="store_true",
                    help="不自动打开浏览器")
     return p.parse_args()
-
 
 if __name__ == "__main__":
     args = parse_args()

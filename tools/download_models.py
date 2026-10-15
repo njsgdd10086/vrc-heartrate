@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """下载运行所需的模型权重
 
 两个模型都来自公开仓库，脚本会自动下载并校验大小。
@@ -48,10 +55,8 @@ MODELS = [
 
 GIT_LFS_ENDPOINT = "https://github.com/{repo}.git/info/lfs/objects/batch"
 
-
 def human(n):
     return f"{n / 1024 / 1024:.1f} MB" if n and n > 1024 * 1024 else f"{n} B"
-
 
 def ok(path, expect):
     """文件已存在且大小合理"""
@@ -61,7 +66,6 @@ def ok(path, expect):
     if expect:
         return size == expect
     return size > 1024
-
 
 def download_via_git_clone(repo, dest_file, tmp_root, src_rel=None):
     """整体 clone 仓库，然后取出需要的文件（用于 GitHub LFS 文件）
@@ -104,7 +108,6 @@ def download_via_git_clone(repo, dest_file, tmp_root, src_rel=None):
     shutil.rmtree(tmp, ignore_errors=True)
     return True
 
-
 def download_via_lfs(spec, dest_file):
     """通过 Git LFS API 取单个文件（用于 OpenCV Zoo）"""
     import json
@@ -144,7 +147,6 @@ def download_via_lfs(spec, dest_file):
         return False
     return download_via_url(href, dest_file)
 
-
 def download_via_url(url, dest_file):
     os.makedirs(os.path.dirname(dest_file), exist_ok=True)
     tmp = dest_file + ".part"
@@ -159,7 +161,6 @@ def download_via_url(url, dest_file):
         if os.path.isfile(tmp):
             os.remove(tmp)
         return False
-
 
 def main():
     ap = argparse.ArgumentParser(description="下载模型权重")
@@ -218,7 +219,6 @@ def main():
         return 1
     print("全部就绪。运行:  python osc_heartrate_cam.py")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

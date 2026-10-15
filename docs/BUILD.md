@@ -147,16 +147,18 @@ matplotlib、`gr.BarPlot` 用 pandas），逐个试太慢，直接全量收集�
 - onefile 每次启动都要解压约 500 MB，启动明显变慢
 - 本项目的 `collect_dynamic_libs("pyvirtualcam")` 在 onefile 下不生效
 
-### 虚拟摄像头的 GPL 问题
+### 虚拟摄像头的许可证
 
-`pyvirtualcam` 是 **GPL-2.0**。若要以 MIT 分发：
+`pyvirtualcam` 是 **GPL-2.0**。本项目整体采用 **GPL-3.0-or-later**，
+两者兼容，所以打包它不需要任何额外处理。
 
-- 从 spec 里移除 `datas/binaries/hiddenimports` 中 pyvirtualcam 相关项
-- 从 `requirements-optional.txt` 里确认不装它
-- 核心功能不受影响，只是「启用虚拟摄像头输出」会提示未安装
+（背景: 早期版本本项目是 MIT，那时与 GPL 的 pyvirtualcam 有冲突；
+但因为项目也依赖 Apache-2.0 的 OpenCV / gradio，GPL-2.0-only 同样不行，
+最终只能选 GPL-3.0。详见 README 的许可证章节。）
 
-注意 GPL-2.0 与 GPL-3.0 不是一回事：本项目其余部分为 MIT，两者条款不同，
-声明时请写**准确**的版本号（容易写错，已踩过）。
+`pyvirtualcam` 在代码里是延迟导入，所以你可以选择不装它
+（此时「启用虚拟摄像头输出」不可用，其余功能正常）—— 但那只是省依赖，
+不是许可证要求。
 
 ### 体积说明
 

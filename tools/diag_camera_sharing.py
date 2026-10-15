@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """实测摄像头能否被多个客户端同时占用
 
 同时还会枚举系统里的虚拟摄像头（OBS 等），虚拟摄像头是解决
@@ -77,7 +83,6 @@ print("=" * 72)
 print("3) 多客户端并发测试（关键）")
 print("=" * 72)
 
-
 def open_once(idx, backend, tag, results, hold=3.0):
     """打开摄像头并持续读帧，把结果写入 results"""
     cap = cv2.VideoCapture(idx, backend)
@@ -93,7 +98,6 @@ def open_once(idx, backend, tag, results, hold=3.0):
             good += 1
     results[tag] = ("打开成功", good)
     cap.release()
-
 
 for idx in indices[:2]:
     print(f"\n  --- 摄像头 {idx} ---")

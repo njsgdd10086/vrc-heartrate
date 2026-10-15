@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """统一包内 MSVC 运行时 DLL 的版本（不删除任何副本）
 
 问题根源: PyInstaller 的依赖分析从无关目录抓到了错版本。实测它把
@@ -34,13 +40,11 @@ CORE = ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"]
 RE = re.compile(r"^(msvcp140|vcruntime140)(_\d+)?(-[0-9a-f]{16,})?\.dll$", re.I)
 CANON = re.compile(r"^(msvcp140|vcruntime140)(_\d+)?", re.I)
 
-
 def canon(name):
     m = CANON.match(name)
     if not m:
         return None
     return f"{m.group(1).lower()}{m.group(2) or ''}.dll"
-
 
 def ver_tuple(path):
     """取文件版本号，失败返回全 0"""
@@ -67,7 +71,6 @@ def ver_tuple(path):
         return best
     except Exception:
         return (0, 0, 0, 0)
-
 
 print(f"目标: {DIST}")
 if not os.path.isdir(DIST):

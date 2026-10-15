@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """对比 DSHOW / MSMF 的持续读取表现，重点看是否中途卡死
 
 背景: cap.read() 实测占整条流水线约 85% 的时间，是预览卡顿的主因。
@@ -20,7 +26,6 @@ import cv2
 
 CAM = 0
 DURATION = 8.0
-
 
 def run_case(label, backend, threaded=None):
     """threaded: None=不动, True/False=设置 CAP_PROP_MSMF_DISABLE_THREADED_READS"""
@@ -72,7 +77,6 @@ def run_case(label, backend, threaded=None):
     print(f"\n{label}:")
     print(show)
     print(f"  每秒帧数: {per_sec}")
-
 
 print("=" * 74)
 print(f"持续读取对比（每次 {DURATION:.0f} 秒）—— 关注每秒帧数是否稳定")

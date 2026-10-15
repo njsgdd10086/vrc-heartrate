@@ -1,3 +1,9 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 njsgdd10086
+#
+# 本项目采用 GPL-3.0-or-later。完整条款见仓库根目录的 LICENSE，版权与说明见 COPYRIGHT.md，
+# 第三方组件（含 FacePhys 模型的隐私保护附加条款）见 THIRD_PARTY_LICENSES.md。
+
 """
 BLE 蓝牙心率 → VRChat OSC 心率桥接脚本（异步高性能 + 优雅退出）
 参考 osc_heartrate.py (Pulsoid 走云版) 改写：不走云端，直接通过蓝牙连接心率广播设备
@@ -62,7 +68,6 @@ logging.basicConfig(
 # 用于优雅关闭的事件
 shutdown_event = asyncio.Event()
 
-
 # -------------------- 轻量异步 OSC 发送器 --------------------
 class AsyncOSCSender:
     """基于 asyncio UDP 的简易 OSC 发送器，仅支持发送 float"""
@@ -92,7 +97,6 @@ class AsyncOSCSender:
     def close(self):
         if self.transport:
             self.transport.close()
-
 
 # -------------------- 心率平滑与超时控制 --------------------
 class HeartrateSmoother:
@@ -155,7 +159,6 @@ class HeartrateSmoother:
         finally:
             logging.debug("心率平滑任务已停止")
 
-
 # -------------------- BLE 心率数据解析 --------------------
 def parse_hr_measurement(data: bytes):
     """解析标准 BLE 心率测量特征 (0x2A37) 的负载，返回心率 BPM（float）"""
@@ -174,7 +177,6 @@ def parse_hr_measurement(data: bytes):
         hr = data[1]
     return float(hr)
 
-
 # -------------------- BLE 扫描与目标发现 --------------------
 async def scan_once(scan_duration: float):
     """执行一次扫描，返回 {地址: (BLEDevice, AdvertisementData)}
@@ -188,7 +190,6 @@ async def scan_once(scan_duration: float):
     await asyncio.sleep(scan_duration)
     await scanner.stop()
     return scanner.discovered_devices_and_advertisement_data
-
 
 async def list_devices(scan_duration: float):
     """--scan 模式：列出附近所有 BLE 设备并退出"""
@@ -215,7 +216,6 @@ async def list_devices(scan_duration: float):
         mark = "  <== 心率服务设备" if is_hr else ""
         print(f"  name={name!r} addr={addr} rssi={rssi}{mark}")
 
-
 def _device_score(dev, adv, address: str, name_filter: str):
     """给设备打分：地址精确匹配 > 名字+心率服务 > 心率服务 > 名字匹配"""
     name = (adv.local_name or dev.name or "").lower()
@@ -233,7 +233,6 @@ def _device_score(dev, adv, address: str, name_filter: str):
     if has_name:
         return 1
     return 0
-
 
 async def find_target_device(address: str, name_filter: str, scan_duration: float):
     """扫描并按优先级寻找目标设备。
@@ -285,7 +284,6 @@ async def find_target_device(address: str, name_filter: str, scan_duration: floa
     hr_in_adv = HR_SERVICE_UUID in [u.lower() for u in best_adv.service_uuids]
     return best_addr, dev_name, hr_in_adv
 
-
 # -------------------- 异步 BLE 客户端 --------------------
 def describe_exception(e: BaseException) -> str:
     """把异常描述清楚。
@@ -304,7 +302,6 @@ def describe_exception(e: BaseException) -> str:
         parts.append(f"{name}({text})" if text else name)
         cur = cur.__cause__ or cur.__context__
     return " <- ".join(parts)
-
 
 async def ble_heartrate_client(smoother: HeartrateSmoother, address: str, name_filter: str):
     """扫描→连接→订阅心率通知；断线自动重连"""
@@ -416,7 +413,6 @@ async def ble_heartrate_client(smoother: HeartrateSmoother, address: str, name_f
 
     logging.debug("蓝牙客户端已停止")
 
-
 # -------------------- 主任务 --------------------
 async def main(address: str, name_filter: str, osc_address: str):
     logging.info(
@@ -444,7 +440,6 @@ async def main(address: str, name_filter: str, osc_address: str):
     osc.close()
     logging.info("清理完成，程序退出")
 
-
 # -------------------- 命令行参数 --------------------
 def parse_args():
     p = argparse.ArgumentParser(
@@ -456,7 +451,6 @@ def parse_args():
     p.add_argument("--name", default=BLE_DEVICE_NAME_FILTER, help="设备名关键字（默认 xinlvguangbo）")
     p.add_argument("--osc-address", default=OSC_ADDRESS, help="OSC 参数地址（默认 /avatar/parameters/VRCOSC/Heartrate/Value）")
     return p.parse_args()
-
 
 # -------------------- 程序入口与信号处理 --------------------
 if __name__ == "__main__":
@@ -474,11 +468,9 @@ if __name__ == "__main__":
 
     main_task = loop.create_task(main(args.address, args.name, args.osc_address))
 
-
     def shutdown():
         logging.info("收到终止信号，正在退出...")
         shutdown_event.set()  # 通知 main() 开始清理
-
 
     # 注册信号处理器
     for sig in (signal.SIGINT, signal.SIGTERM):
