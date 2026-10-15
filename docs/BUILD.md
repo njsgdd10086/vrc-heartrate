@@ -149,11 +149,14 @@ matplotlib、`gr.BarPlot` 用 pandas），逐个试太慢，直接全量收集�
 
 ### 虚拟摄像头的 GPL 问题
 
-`pyvirtualcam` 是 GPL-3.0。若要以 MIT 分发：
+`pyvirtualcam` 是 **GPL-2.0**。若要以 MIT 分发：
 
 - 从 spec 里移除 `datas/binaries/hiddenimports` 中 pyvirtualcam 相关项
 - 从 `requirements-optional.txt` 里确认不装它
 - 核心功能不受影响，只是「启用虚拟摄像头输出」会提示未安装
+
+注意 GPL-2.0 与 GPL-3.0 不是一回事：本项目其余部分为 MIT，两者条款不同，
+声明时请写**准确**的版本号（容易写错，已踩过）。
 
 ### 体积说明
 

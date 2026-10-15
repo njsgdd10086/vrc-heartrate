@@ -70,17 +70,38 @@
 
 ## pyvirtualcam
 
-- **许可证**: GNU General Public License v3.0 (**GPL-3.0**)
-- **⚠️ 重要**: GPL-3.0 是**传染性**许可证。若你分发打包了 pyvirtualcam 的
+- **来源**: https://github.com/letmaik/pyvirtualcam
+- **许可证**: GNU General Public License **version 2** (**GPL-2.0**)
+  - 核实依据: 包元数据 classifier 为
+    `License :: OSI Approved :: GNU General Public License v2 (GPLv2)`，
+    上游仓库 LICENSE 为 GPL v2 全文（2026-10 核实）
+  - ⚠️ **注意是 v2 不是 v3** —— GPL-2.0 与 GPL-3.0 条款不同（例如专利与
+    反 Tivoization 条款），声明时必须写准确版本
+- **⚠️ 重要**: GPL 是**传染性**许可证。若你分发打包了 pyvirtualcam 的
   二进制，需注意 GPL 的兼容性要求。
 - **本项目如何处理**: `pyvirtualcam` 只在用户启用「虚拟摄像头输出」时才被
   `import`，属于**可选功能**。若你要以宽松许可证（如 MIT）分发，建议：
-  - 要么在文档中明确声明包含 GPL-3.0 组件及其影响
+  - 要么在文档中明确声明包含 GPL-2.0 组件及其影响
   - 要么提供**不含 pyvirtualcam** 的构建（此时虚拟摄像头功能不可用，
     但核心测心率功能完全正常）
-- **虚拟摄像头驱动的另一层依赖**: Windows 上 pyvirtualcam 需要
-  [OBS Studio](https://obsproject.com/) 提供 `obs-virtualcam-module64.dll`。
-  OBS Studio 为 GPL-2.0。本项目**不打包** OBS，只要求用户自行安装。
+
+### 虚拟摄像头还需要系统级的驱动
+
+`pyvirtualcam` 只是"生产者"，真正对外的虚拟摄像头设备由系统里已注册的
+DirectShow 过滤器提供。Windows 上 pyvirtualcam 内置两个后端，按顺序自动尝试
+（调用 `pyvirtualcam.Camera()` 时不指定 `backend`，即"全都试一遍"）：
+
+| 后端 | 提供的设备名 | 驱动来源 | 许可证 |
+|---|---|---|---|
+| `obs` | `OBS Virtual Camera` | [OBS Studio](https://obsproject.com/) | GPL-2.0 |
+| `unitycapture` | `Unity Video Capture` | [UnityCapture](https://github.com/schellingb/UnityCapture) | 作者声明为公共领域 |
+
+**任一存在即可**，程序会自动选用可用的那个 —— 所以并非"必须装 OBS"。
+两者本项目都**不打包**，只依赖用户系统里已注册的过滤器。
+
+> 这两个后端都是通过**实例化已注册的 COM/DirectShow 过滤器**工作，不依赖
+> OBS 或 UnityCapture 的安装路径，因此官方版 / Steam 版 / 便携版 OBS 都可以。
+> 另外 **OBS 不需要运行** —— 本程序自己充当生产者。
 
 ## ONNX Runtime
 
@@ -107,7 +128,7 @@
 - [ ] 在 Release 说明中包含 `models/FacePhys-LICENSE.txt`
 - [ ] 明确告知用户：心率数据会发送到本机 VRChat（联网平台）
 - [ ] 若启用虚拟摄像头功能，画面会暴露给本机其他程序 —— 已在 UI 中提示
-- [ ] 若包含 pyvirtualcam，声明 GPL-3.0 组件
+- [ ] 若包含 pyvirtualcam，声明 **GPL-2.0** 组件（不是 GPL-3.0，版本别写错）
 - [ ] 不要移除 `models/` 下的许可证文件
 
 > 以上为工程层面的整理，**不构成法律意见**。商业用途请咨询专业人士。

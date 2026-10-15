@@ -691,8 +691,13 @@ class CameraRPPG:
             return True, f"{cam.device} ({cam.width}x{cam.height}@{cam.fps}fps)"
         except Exception as e:
             self.vcam = None
-            return False, (f"虚拟摄像头启动失败: {type(e).__name__}: {e}。"
-                           f"请确认已安装 OBS（其虚拟摄像头驱动是必需的）")
+            msg = (f"虚拟摄像头启动失败: {type(e).__name__}: {e}。"
+                   f"需要在系统里存在一个虚拟摄像头驱动 —— 装 OBS Studio"
+                   f"（提供 OBS Virtual Camera）或 UnityCapture"
+                   f"（提供 Unity Video Capture）任一即可；"
+                   f"两者都不需要处于运行状态")
+            logging.error(msg)
+            return False, msg
 
     def stop_virtual_cam(self):
         cam, self.vcam = self.vcam, None
@@ -2002,9 +2007,13 @@ class HeartRateWebUI:
                     "同时把画面输出到一个虚拟摄像头，让面补去读虚拟摄像头。\n\n"
                     "**用法**：\n"
                     "1. 勾选本项并点「开始」，状态栏会显示虚拟摄像头的设备名\n"
-                    "2. 到面补软件里把摄像头改成该设备（如 `OBS Virtual Camera`）\n"
-                    "3. 前提：需要装有 OBS（提供虚拟摄像头驱动），"
-                    "**但 OBS 本身不用运行**\n\n"
+                    "2. 到面补软件里把摄像头改成该设备\n"
+                    "3. 前提：系统里要有一个虚拟摄像头驱动 —— 装 OBS Studio"
+                    "（提供 `OBS Virtual Camera`）或 UnityCapture"
+                    "（提供 `Unity Video Capture`）任一即可，"
+                    "**两者都不需要运行**（本程序自己充当生产者）\n\n"
+                    "设备名不是写死的：程序会自动发现可用的后端，"
+                    "状态栏显示的就是实际创建出来的名字。\n\n"
                     "注意：程序独占物理摄像头期间，其他程序无法再打开它 —— "
                     "这正是要解决的问题，所以面补必须改用虚拟摄像头。\n\n"
                     "⚠️ **隐私提醒**：启用后画面会经由系统虚拟摄像头驱动暴露给"

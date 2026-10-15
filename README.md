@@ -93,7 +93,14 @@ python osc_heartrate_cam.py
 2. 状态栏会显示虚拟摄像头的设备名（通常是 `OBS Virtual Camera`）
 3. 到**面补软件**里把摄像头改成这个设备
 
-前提：需要安装 [OBS Studio](https://obsproject.com/) 来提供虚拟摄像头驱动，**但 OBS 本身不用运行**（本程序自己充当生产者）。
+前提：系统里需要有一个**虚拟摄像头驱动**。装了
+[OBS Studio](https://obsproject.com/)（提供 `OBS Virtual Camera`）或
+[UnityCapture](https://github.com/schellingb/UnityCapture)（提供
+`Unity Video Capture`）任一即可，程序会自动选用可用的那个。**两者都不需要
+处于运行状态** —— 本程序自己充当生产者。
+
+程序不写死设备名：它通过 pyvirtualcam 自动发现可用的后端，界面上显示的就是
+实际创建出来的设备名，按那个名字去面补里找即可。
 
 > ⚠️ 注意顺序：本程序必须先启动并点「开始」，虚拟摄像头才存在。
 
@@ -217,12 +224,22 @@ python osc_heartrate_cam.py --size 1280x720 # 指定首选分辨率
 ### ⚠️ 关于虚拟摄像头功能的许可证
 
 「虚拟摄像头输出」依赖 [pyvirtualcam](https://github.com/letmaik/pyvirtualcam)，
-它是 **GPL-3.0**（传染性许可证）。为此本项目做了拆分：
+它是 **GPL-2.0**（传染性许可证，注意是 v2 不是 v3）。为此本项目做了拆分：
 
 - **核心测心率功能完全不依赖 pyvirtualcam** —— 代码里是延迟导入，
   只有启用虚拟摄像头时才会 `import`
 - 因此以 MIT 分发时，**可以不安装、不打包**它
-- 如果你打包了它，发行版整体需遵守 GPL-3.0，请在 Release 里声明
+- 如果你打包了它，发行版整体需遵守 GPL-2.0，请在 Release 里声明
+
+另外，虚拟摄像头还需要系统里存在一个**虚拟摄像头驱动**。以下任一即可，
+程序会自动选用可用的那个（两个本项目都不打包）：
+
+| 提供方 | 设备名 | 许可证 |
+|---|---|---|
+| [OBS Studio](https://obsproject.com/) | `OBS Virtual Camera` | GPL-2.0 |
+| [UnityCapture](https://github.com/schellingb/UnityCapture) | `Unity Video Capture` | 公共领域 |
+
+所以**并非必须安装 OBS**；而且无论用哪个，**都不需要该软件处于运行状态**。
 
 第三方组件（FacePhys 模型含**隐私保护附加条款**）的完整说明见
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)。
@@ -232,4 +249,5 @@ python osc_heartrate_cam.py --size 1280x720 # 指定首选分辨率
 - [FacePhys](https://github.com/KegangWangCCNU/FacePhys-Release) —— rPPG 模型（Kegang Wang 等）
 - [OpenCV](https://opencv.org/) —— YuNet 人脸检测
 - [pyvirtualcam](https://github.com/letmaik/pyvirtualcam) —— 虚拟摄像头输出
+- [OBS Studio](https://obsproject.com/) / [UnityCapture](https://github.com/schellingb/UnityCapture) —— 虚拟摄像头驱动
 - [Gradio](https://gradio.app/) —— 网页界面

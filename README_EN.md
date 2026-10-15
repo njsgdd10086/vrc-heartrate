@@ -110,9 +110,15 @@ Tick **启用虚拟摄像头输出** (Enable virtual camera output) in the UI, t
    `OBS Virtual Camera`)
 3. Point your **face-tracking software** at that device instead
 
-Requires [OBS Studio](https://obsproject.com/) to be *installed* (it provides
-the virtual camera driver) — but **OBS does not need to be running**; this app
-acts as the producer itself.
+Requires a **virtual camera driver** to be present on the system. Either
+[OBS Studio](https://obsproject.com/) (provides `OBS Virtual Camera`) or
+[UnityCapture](https://github.com/schellingb/UnityCapture) (provides
+`Unity Video Capture`) works — the app picks whichever is available, and
+**neither needs to be running**; this app acts as the producer itself.
+
+No device name is hard-coded: the backend is auto-discovered via pyvirtualcam,
+and the status bar shows the device that was actually created — use that name
+in your face-tracking software.
 
 > ⚠️ Ordering matters: the virtual camera only exists after this app has
 > started and you clicked **开始**.
@@ -264,14 +270,24 @@ Project code: [MIT](LICENSE)
 ### ⚠️ Virtual camera feature and GPL
 
 The virtual camera output depends on
-[pyvirtualcam](https://github.com/letmaik/pyvirtualcam), which is **GPL-3.0**.
-This project is structured to keep that optional:
+[pyvirtualcam](https://github.com/letmaik/pyvirtualcam), which is **GPL-2.0**
+(note: version 2, not 3). This project is structured to keep that optional:
 
 - Core heart-rate measurement does **not** depend on pyvirtualcam — it is
   imported lazily, only when you enable the virtual camera
 - So for an MIT release you can simply not install or bundle it
-- If you do bundle it, the distribution as a whole is subject to GPL-3.0 —
+- If you do bundle it, the distribution as a whole is subject to GPL-2.0 —
   state that in your release notes
+
+The feature additionally needs a system-level **virtual camera driver**. Either
+of these works, and the app picks whichever is registered (neither is bundled):
+
+| Provider | Device name | License |
+|---|---|---|
+| [OBS Studio](https://obsproject.com/) | `OBS Virtual Camera` | GPL-2.0 |
+| [UnityCapture](https://github.com/schellingb/UnityCapture) | `Unity Video Capture` | public domain |
+
+So OBS is **not** strictly required, and neither program needs to be running.
 
 Full third-party terms (including FacePhys's privacy addendum) are in
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
@@ -281,4 +297,5 @@ Full third-party terms (including FacePhys's privacy addendum) are in
 - [FacePhys](https://github.com/KegangWangCCNU/FacePhys-Release) — rPPG model
 - [OpenCV](https://opencv.org/) — YuNet face detection
 - [pyvirtualcam](https://github.com/letmaik/pyvirtualcam) — virtual camera output
+- [OBS Studio](https://obsproject.com/) / [UnityCapture](https://github.com/schellingb/UnityCapture) — virtual camera driver
 - [Gradio](https://gradio.app/) — web UI

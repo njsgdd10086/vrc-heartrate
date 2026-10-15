@@ -11,7 +11,7 @@
   2) onnxruntime 的 DLL 必须完整，且打包后要用 fix_msvc_dlls.py 修正
      MSVC 运行时（否则报 "DLL 初始化例程失败"，原因见 docs/BUILD.md 坑 1）
   3) 排除 torch/tensorflow 等无关大依赖，显著减小体积
-  4) pyvirtualcam 是 GPL-3.0 —— 要以 MIT 分发就删掉第 3c 段
+  4) pyvirtualcam 是 GPL-2.0 —— 要以 MIT 分发就删掉第 3c 段
 """
 import os
 import re
@@ -105,7 +105,7 @@ for _n, _src in _removed:
 # --- 3c) pyvirtualcam: 虚拟摄像头输出 ---
 # 它自带原生 DLL（Windows 上是 OBS 虚拟摄像头协议的实现），
 # 不收集的话运行时会报找不到后端。
-# 注意: pyvirtualcam 是 GPL-3.0。要以 MIT 分发就删掉这一段，
+# 注意: pyvirtualcam 是 GPL-2.0。要以 MIT 分发就删掉这一段，
 #       核心测心率功能不依赖它（代码里是延迟导入）。
 datas += collect_data_files("pyvirtualcam")
 binaries += collect_dynamic_libs("pyvirtualcam")
